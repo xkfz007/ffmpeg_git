@@ -1,0 +1,185 @@
+#!/bin/bash
+set -o
+CONF="RELEASE"
+if [ $# -ge 1 ];then
+    CONF=$(echo $1|tr '[a-z]' '[A-Z]')
+fi
+
+CONF_LIST=("RELEASE" "DEBUG")
+
+FOUND=0
+for i in ${CONF_LIST[@]}
+do
+    if [ "$i" == "$CONF" ];then
+        FOUND=1
+        break
+    fi
+done
+
+if [ $FOUND -eq 0 ];then
+    CONF="RELEASE"
+fi
+
+
+current_dir=`pwd`
+build_dir="${current_dir}/$CONF"
+if [ ! -e $build_dir ];then
+    mkdir $build_dir
+fi
+
+#root_dir=`realpath "${current_dir}/../"`
+root_dir=`cd "${current_dir}/../source";pwd`
+echo "root_dir="$root_dir
+
+sys=$(uname -o)
+if [[ $sys =~ "Cygwin" ]];then
+    echo "sys="$sys
+    sys_name="cygwin"
+elif [[ $sys =~ "Linux" ]];then
+    echo "sys="$sys
+    sys_name="linux"
+fi
+
+
+#sys_name="linux"
+LIB_DIR="${current_dir}/${sys_name}/lib"
+INC_DIR="${current_dir}/${sys_name}/include"
+PKG_DIR="${LIB_DIR}/pkgconfig"
+PKG_PREFIX="${current_dir}/${sys_name}"
+echo "pkg_dir="$PKG_DIR
+
+# general pkg file for some libs
+pkgconfig_generate(){
+    name=$1
+    comment=$2
+    version=$3
+    libs=$4
+    pkg_prefix=$5
+    cat <<EOF  >"${pkg_prefix}/lib/pkgconfig/${name}.pc"
+prefix=${pkg_prefix}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: $name
+Description: $comment
+Version: $version
+Libs: -L\${libdir} -l${name} 
+Libs.private: ${libs}
+Cflags: -I\${includedir}
+EOF
+
+}
+
+regen_pkg=1
+if [ $regen_pkg -eq 1 ];then
+    test -e ${PKG_DIR} || mkdir -p ${PKG_DIR}
+    if [ $sys_name = "linux" ];then
+        pkgconfig_generate "x264"    "H.264 (MPEG4 AVC) encoder library" "0.148.x" "-lpthread -lm -ldl"      "${PKG_PREFIX}"
+        pkgconfig_generate "x265"    "H.265/HEVC video encoder"          "1.9"     "-lstdc++ -lm -lrt -ldl"  "${PKG_PREFIX}"
+        pkgconfig_generate "fdk-aac" "AAC Codec Library"                 "0.1.4"   "-lm"                     "${PKG_PREFIX}"
+    elif [ $sys_name = "cygwin" ];then
+        pkgconfig_generate "x264"    "H.264 (MPEG4 AVC) encoder library" "0.148.x" "-lpthread -lm -ldl"      "${PKG_PREFIX}"
+        pkgconfig_generate "x265"    "H.265/HEVC video encoder"          "2.0"     "-lstdc++ -lcygwin -ladvapi32 -lshell32 -luser32 -lkernel32 -lrt -ldl"  "${PKG_PREFIX}"
+        #pkgconfig_generate "fdk-aac" "AAC Codec Library"                 "0.1.4"   ""                     "${PKG_PREFIX}"
+    fi
+fi
+
+
+export PKG_CONFIG_PATH="$PKG_GONFIG_PATH:${PKG_DIR}"
+echo "PKG_CONFIG_PATH="$PKG_CONFIG_PATH
+
+cd ${build_dir}
+cmd="${root_dir}/configure  \
+    --prefix=$build_dir \
+    --pkg-config-flags=\"--static\" \
+    --disable-doc       \
+    --disable-htmlpages \
+    --disable-manpages  \
+    --disable-podpages  \
+    --disable-txtpages  \
+    --disable-ffplay    \
+    --disable-ffserver  \
+    --disable-shared    \
+    --enable-gpl        \
+    --enable-nonfree    \
+    --enable-static     \
+    --enable-libx264    \
+    --enable-libx265    \
+    --disable-d3d11va                 \
+    --disable-dxva2                   \
+    --disable-vaapi                   \
+    --disable-vda                     \
+    --disable-vdpau                   \
+    --disable-videotoolbox            \
+    --disable-bzlib                   \
+    --disable-iconv                   \
+    --disable-libxcb                  \
+    --disable-libxcb-shm              \
+    --disable-libxcb-xfixes           \
+    --disable-libxcb-shape            \
+    --disable-lzma                    \
+    --disable-sdl2                    \
+    --disable-xlib                    \
+    --disable-zlib                    \
+    --disable-schannel                \
+    --disable-securetransport         \
+    --disable-outdevs                 \
+    --disable-indevs                  \
+    --enable-indev=lavfi              \
+    --extra-ldflags=\"-L${LIB_DIR}\" \
+    --extra-cflags=\"-I${INC_DIR}\" \
+"
+    #--enable-libfdk_aac \
+if [ "$CONF" = "DEBUG"  ];then
+    cmd="$cmd \
+        --disable-optimizations \
+        --disable-stripping     \
+        --disable-asm           \
+        --disable-pthreads      \
+        "
+fi
+echo $cmd
+eval $cmd
+
+config_file="config.h"
+if [ ! -e $config_file  ];then
+    echo "ERROR: ${config_file} does not exist"
+    exit
+fi
+
+# modify the config.h for cygwin
+function replace_macro
+{
+    def=$1
+    f=$2
+    sed -i "s/.*$def.*/#define $def 0/g" $f
+}
+
+#sed -i "s/.*HAVE_ARC4RANDOM.*/#define HAVE_ARC4RANDOM 0/g" config.h
+
+if [ "$sys_name" = "cygwin" ];then
+    replace_macro "HAVE_ARC4RANDOM"     "$config_file"
+    replace_macro "HAVE_GETTIMEOFDAY"   "$config_file"
+    replace_macro "HAVE_GLOB"           "$config_file"
+    replace_macro "CONFIG_DOC"          "$config_file"
+    replace_macro "HAVE_TERMIOS_H"      "$config_file"
+fi
+
+
+#add defines.h to config.h
+line='#include \"../defines.h\"'
+cnt=$(grep -n "$line" $config_file|wc -l)
+#echo $cnt
+#cmd1="grep -n \"$line\" $config_file|wc -l"
+#echo $cmd1
+#eval $cmd1
+if [ $cnt -eq 0 ];then
+    #echo "defines.h will be included by config.h"
+    sed -i '$i'"$line" $config_file 
+elif [ $cnt -eq 1 ];then
+    echo "defines.h has already been included by config.h"
+else
+    echo "WARNING:Too many including of defines.h in config.h, please check"
+fi
+cd -

@@ -155,6 +155,8 @@ int av_parse_video_size(int *width_ptr, int *height_ptr, const char *str)
         }
     }
     if (i == n) {
+		//+:from this, we can see any letters could be the seperator
+		//+:eg. 100x100,100*100,100z100
         width = strtol(str, (void*)&p, 10);
         if (*p)
             p++;

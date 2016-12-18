@@ -1,0 +1,5 @@
+version S2
+* add option 'digit_only' for video file testsrc
+* enlarge filename to 2048
+* add glob to support globbing
+* support '0:p:0:v:1' format for option map

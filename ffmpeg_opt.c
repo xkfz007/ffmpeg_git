@@ -325,16 +325,16 @@ static int opt_map(void *optctx, const char *opt, const char *arg)
             exit_program(1);
         }
     } else {
-        if (allow_unused = strchr(map, '?'))
+        if (allow_unused = strchr(map, '?'))//+: check if invalid map could be ignored
             *allow_unused = 0;
-        file_idx = strtol(map, &p, 0);
+        file_idx = strtol(map, &p, 0);//+: get file index
         if (file_idx >= nb_input_files || file_idx < 0) {
             av_log(NULL, AV_LOG_FATAL, "Invalid input file index: %d.\n", file_idx);
             exit_program(1);
         }
         if (negative)
             /* disable some already defined maps */
-            for (i = 0; i < o->nb_stream_maps; i++) {
+            for (i = 0; i < o->nb_stream_maps; i++) {//+: like -map 0 -map -0:1, here is for the second map
                 m = &o->stream_maps[i];
                 if (file_idx == m->file_index &&
                     check_stream_specifier(input_files[m->file_index]->ctx,
@@ -738,6 +738,13 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
             ist->resample_height  = ist->dec_ctx->height;
             ist->resample_width   = ist->dec_ctx->width;
             ist->resample_pix_fmt = ist->dec_ctx->pix_fmt;
+#if FIX_PIXEL_FORMAT
+			if(ist->resample_pix_fmt == AV_PIX_FMT_NONE){
+				av_log(NULL,AV_LOG_WARNING,"Invalid pixel format found, use yuv420p as default\n");
+			    ist->resample_pix_fmt=AV_PIX_FMT_YUV420P;
+			}
+#endif
+			
 
             MATCH_PER_STREAM_OPT(frame_rates, str, framerate, ic, st);
             if (framerate && av_parse_video_rate(&ist->framerate,
@@ -1081,7 +1088,7 @@ static int open_input_file(OptionsContext *o, const char *filename)
     f->nb_streams = ic->nb_streams;
     f->rate_emu   = o->rate_emu;
     f->accurate_seek = o->accurate_seek;
-    f->loop = o->loop;
+    f->loop = o->loop;//+:correspond option stream_loop
     f->duration = 0;
     f->time_base = (AVRational){ 1, 1 };
 #if HAVE_PTHREADS
@@ -3311,6 +3318,203 @@ static int opt_progress(void *optctx, const char *opt, const char *arg)
     progress_avio = avio;
     return 0;
 }
+
+#if WRAP_FFMPEG
+
+void show_ffconvert_usage(){
+	fprintf(stdout,"Usage:");
+	fprintf(stdout,"same with orignal ffmpeg except using -o to mark the output\n");
+	fprintf(stdout,"\tffconvert -i <pattern> -o <output_tag>\n");
+	fprintf(stdout,"Options:\n");
+	fprintf(stdout,"\t-o <string> :output filename or output tag\n");
+	fprintf(stdout,"\t-Y :do excute the command\n");
+	fprintf(stdout,"\t-H :show help\n");
+	fprintf(stdout,"\t-h :show original ffmpeg help\n");
+	fprintf(stdout,"Examples:\n");
+	fprintf(stdout,"\tffmpeg -i \"*\" -c copy -o a.ts\n");
+//	exit(1);
+}
+
+#define GET_ARG(arg)                                                                   \
+		do {                                                                           \
+			arg = argv[optindex++];                                                    \
+			if (!arg) {                                                                \
+				av_log(NULL, AV_LOG_ERROR, "Missing argument for option '%s'.\n", opt);\
+				return AVERROR(EINVAL);                                                \
+			}                                                                          \
+		} while (0)
+#define SET_OUTPUT(otag,opos)                                             \
+		do{                                                               \
+			output_tag[ocnt]=otag;                                        \
+			otag_list[ocnt]=opos;                                         \
+			ocnt++;                                                       \
+			argv_internal[ind++]=otag;                                    \
+		}while(0)
+
+#define DEFAULT_OUTTAG "out"
+
+int ffmpeg_parse_options_inadvance(int argc,char** argv,int *argc_internal,char**argv_internal,
+		const char **output_tag,int* otag_list,int *output_cnt,int* iidx,char** pat){
+
+	int optindex = 1;
+	int dashdash = -2;
+	int ind=0;
+	int ocnt=0;
+	int input_cnt=0;
+	char* patterns[20];
+	int input_ind[20];
+	int do_execute=0;
+	int i;
+
+	//copy first arg to internal arg;
+	argv_internal[ind++]=argv[0];
+
+	//copy other options in argv
+	while (optindex < argc) {
+		const char *opt = argv[optindex++], *arg;
+		const OptionDef *po;
+		int ret;
+
+		av_log(NULL, AV_LOG_DEBUG, "Reading option '%s' ...", opt);
+
+		if (opt[0] == '-' && opt[1] == '-' && !opt[2]) {
+			dashdash = optindex;
+			continue;
+		}
+		if(!strcmp(opt,"-H")){
+			show_ffconvert_usage();
+			exit(1);
+		}
+		if(!strcmp(opt,"-Y")){
+			do_execute=1;
+			continue;
+		}
+
+		//overlook option '-o'
+		if(!strcmp(opt,"-o")){
+			continue;
+		}
+		/* unnamed group separators, e.g. output filename */
+		if (opt[0] != '-' || !opt[1] || dashdash+1 == optindex) {
+			SET_OUTPUT(opt,optindex-1);
+			av_log(NULL, AV_LOG_DEBUG, " matched as output file.\n");
+			continue;
+		}
+
+
+		/* named group separators, e.g. -i */
+		if(!strcmp(opt,"-i")){
+			input_ind[input_cnt]=optindex;
+			GET_ARG(arg);
+			patterns[input_cnt]=arg;
+			input_cnt++;
+
+			av_log(NULL,AV_LOG_INFO,"input file found\n");
+            av_log(NULL, AV_LOG_DEBUG, " matched as input file with argument '%s'.\n", arg);
+
+			argv_internal[ind++]=opt;
+			argv_internal[ind++]=arg;
+			continue;
+		}
+
+		//        opt++;
+
+		/* normal options */
+		po = find_option(options, opt+1);
+		if (po->name) {
+			argv_internal[ind++]=opt;
+			if (po->flags & OPT_EXIT) {
+				/* optional argument, e.g. -h */
+				arg = argv[optindex++];
+			} else if (po->flags & HAS_ARG) {
+				GET_ARG(arg);
+				argv_internal[ind++]=arg;
+				if(!strcmp(po->name,"f")&&!strcmp(arg,"tee"))
+					return FF_TEE_OUTPUT;
+			} else {
+				arg = "1";
+			}
+
+			av_log(NULL, AV_LOG_DEBUG, " matched as option '%s' (%s) with "
+					"argument '%s'.\n", po->name, po->help, arg);
+			continue;
+		}
+
+		/* AVOptions */
+		if (argv[optindex]) {
+			ret = find_avoption(NULL, opt+1, argv[optindex]);
+			if (ret >= 0) {
+				argv_internal[ind++]=opt;
+				argv_internal[ind++]=argv[optindex];
+				av_log(NULL, AV_LOG_DEBUG, " matched as AVOption '%s' with "
+						"argument '%s'.\n", opt, argv[optindex]);
+				optindex++;
+				continue;
+			} else if (ret != FFERROR_OPTION_NOT_FOUND) {
+				av_log(NULL, AV_LOG_ERROR, "Error parsing option '%s' "
+						"with argument '%s'.\n", opt, argv[optindex]);
+				return ret;
+			}
+		}
+
+		/* boolean -nofoo options */
+		if (opt[1] == 'n' && opt[2] == 'o' &&
+				(po = find_option(options, opt + 3)) &&
+				po->name && po->flags & OPT_BOOL) {
+			argv_internal[ind++]=opt;
+			av_log(NULL, AV_LOG_DEBUG, " matched as option '%s' (%s) with "
+					"argument 0.\n", po->name, po->help);
+			continue;
+		}
+
+		av_log(NULL, AV_LOG_ERROR, "Unrecognized option '%s'.\n", opt);
+		return FFERROR_OPTION_NOT_FOUND;
+	}
+
+	av_log(NULL, AV_LOG_DEBUG, "Finished splitting the commandline.\n");
+
+	if(!input_cnt){
+		return FFERROR_NO_INPUT;
+	}
+	else if (input_cnt>1){
+		return FFERROR_MULTI_INPUT;
+	}
+	else{
+		*iidx=input_ind[0];
+		*pat=patterns[0];
+	}
+
+	//check if this is a livestream
+//	if(!strncmp(patterns,"udp:",4)||
+//			!strncmp(patterns,"rtmp:",5)||
+//			!strncmp(patterns,"http:",5)||
+//			!strncmp(patterns,"rtsp:",5)){
+//		av_log(NULL,AV_LOG_INFO,"Input is live stream.\n");
+//		return FFERROR_INPUT_IS_LIVE;
+//	}
+
+	if(!ocnt){
+//		if(*is_livestream){
+//			av_log(NULL,AV_LOG_ERROR,"Input is live stream, but output is not set.\n");
+//			show_ffconvert_usage();
+//			exit(1);
+//		}
+		SET_OUTPUT(DEFAULT_OUTTAG,ind);
+	}
+
+	//add -y option
+	argv_internal[ind++]="-y";
+
+	*argc_internal=ind;
+	*output_cnt=ocnt;
+
+	if(do_execute)
+		return FF_DO_EXECUTE;
+
+	return 0;
+}
+#endif
+
 
 #define OFFSET(x) offsetof(OptionsContext, x)
 const OptionDef options[] = {

@@ -213,8 +213,10 @@ void show_help_children(const AVClass *class, int flags)
     while (child = av_opt_child_class_next(class, child))
         show_help_children(child, flags);
 }
-
-static const OptionDef *find_option(const OptionDef *po, const char *name)
+#if !WRAP_FFMPEG
+static
+#endif
+const OptionDef *find_option(const OptionDef *po, const char *name)
 {
     const char *p = strchr(name, ':');
     int len = p ? p - name : strlen(name);
@@ -296,6 +298,8 @@ static int write_option(void *optctx, const OptionDef *po, const char *opt,
 {
     /* new-style options contain an offset into optctx, old-style address of
      * a global var*/
+     //+:OPT_OFFSET and OPT_SPEC imply this is an new-style option
+     //+:and u.off is used. Or u.dst_ptr is used to store option argument
     void *dst = po->flags & (OPT_OFFSET | OPT_SPEC) ?
                 (uint8_t *)optctx + po->u.off : po->u.dst_ptr;
     int *dstcount;
@@ -410,6 +414,8 @@ void parse_options(void *optctx, int argc, char **argv, const OptionDef *options
     }
 }
 
+//+:parse a option group: global options, inputfile options, outputfile options
+//+:called by ffmpeg_parse_options and openfiles
 int parse_optgroup(void *optctx, OptionGroup *g)
 {
     int i, ret;
@@ -442,21 +448,21 @@ int parse_optgroup(void *optctx, OptionGroup *g)
 
     return 0;
 }
-
+//+:mainly used to locate options like: -loglevel(-v)¡ê?-report ¡ê?-hide_banner, -version
 int locate_option(int argc, char **argv, const OptionDef *options,
                   const char *optname)
 {
     const OptionDef *po;
     int i;
 
-    for (i = 1; i < argc; i++) {
+    for (i = 1; i < argc; i++) {//+:traverse all the args
         const char *cur_opt = argv[i];
 
         if (*cur_opt++ != '-')
             continue;
 
         po = find_option(options, cur_opt);
-        if (!po->name && cur_opt[0] == 'n' && cur_opt[1] == 'o')
+        if (!po->name && cur_opt[0] == 'n' && cur_opt[1] == 'o')//+:no-opt is supported for bool options
             po = find_option(options, cur_opt + 2);
 
         if ((!po->name && !strcmp(cur_opt, optname)) ||
@@ -632,6 +638,98 @@ int opt_default(void *optctx, const char *opt, const char *arg)
         return 0;
     return AVERROR_OPTION_NOT_FOUND;
 }
+
+#if WRAP_FFMPEG
+int find_avoption(void *optctx, const char *opt, const char *arg)
+{
+    const AVOption *o;
+    int consumed = 0;
+    char opt_stripped[128];
+    const char *p;
+    const AVClass *cc = avcodec_get_class(), *fc = avformat_get_class();
+#if CONFIG_AVRESAMPLE
+    const AVClass *rc = avresample_get_class();
+#endif
+#if CONFIG_SWSCALE
+    const AVClass *sc = sws_get_class();
+#endif
+#if CONFIG_SWRESAMPLE
+    const AVClass *swr_class = swr_get_class();
+#endif
+
+    if (!(p = strchr(opt, ':')))
+        p = opt + strlen(opt);
+    av_strlcpy(opt_stripped, opt, FFMIN(sizeof(opt_stripped), p - opt + 1));
+
+    if ((o = opt_find(&cc, opt_stripped, NULL, 0,
+                         AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ)) ||
+        ((opt[0] == 'v' || opt[0] == 'a' || opt[0] == 's') &&
+         (o = opt_find(&cc, opt + 1, NULL, 0, AV_OPT_SEARCH_FAKE_OBJ)))) {
+//        av_dict_set(&codec_opts, opt, arg, FLAGS);
+        consumed = 1;
+    }
+    if ((o = opt_find(&fc, opt, NULL, 0,
+                         AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ))) {
+//        av_dict_set(&format_opts, opt, arg, FLAGS);
+        if (consumed)
+            av_log(NULL, AV_LOG_VERBOSE, "Routing option %s to both codec and muxer layer\n", opt);
+        consumed = 1;
+    }
+#if CONFIG_SWSCALE
+    if (!consumed && (o = opt_find(&sc, opt, NULL, 0,
+                         AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ))) {
+//        struct SwsContext *sws = sws_alloc_context();
+//        int ret = av_opt_set(sws, opt, arg, 0);
+//        sws_freeContext(sws);
+        if (!strcmp(opt, "srcw") || !strcmp(opt, "srch") ||
+            !strcmp(opt, "dstw") || !strcmp(opt, "dsth") ||
+            !strcmp(opt, "src_format") || !strcmp(opt, "dst_format")) {
+            av_log(NULL, AV_LOG_ERROR, "Directly using swscale dimensions/format options is not supported, please use the -s or -pix_fmt options\n");
+            return AVERROR(EINVAL);
+        }
+//        if (ret < 0) {
+//            av_log(NULL, AV_LOG_ERROR, "Error setting option %s.\n", opt);
+//            return ret;
+//        }
+
+//        av_dict_set(&sws_dict, opt, arg, FLAGS);
+
+        consumed = 1;
+    }
+#else
+    if (!consumed && !strcmp(opt, "sws_flags")) {
+        av_log(NULL, AV_LOG_WARNING, "Ignoring %s %s, due to disabled swscale\n", opt, arg);
+        consumed = 1;
+    }
+#endif
+#if CONFIG_SWRESAMPLE
+    if (!consumed && (o=opt_find(&swr_class, opt, NULL, 0,
+                                    AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ))) {
+//        struct SwrContext *swr = swr_alloc();
+//        int ret = av_opt_set(swr, opt, arg, 0);
+//        swr_free(&swr);
+//        if (ret < 0) {
+//            av_log(NULL, AV_LOG_ERROR, "Error setting option %s.\n", opt);
+//            return ret;
+//        }
+//        av_dict_set(&swr_opts, opt, arg, FLAGS);
+        consumed = 1;
+    }
+#endif
+#if CONFIG_AVRESAMPLE
+    if ((o=opt_find(&rc, opt, NULL, 0,
+                       AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ))) {
+//        av_dict_set(&resample_opts, opt, arg, FLAGS);
+        consumed = 1;
+    }
+#endif
+
+    if (consumed)
+        return 0;
+    return AVERROR_OPTION_NOT_FOUND;
+}
+
+#endif
 
 /*
  * Check whether given option is a group separator.

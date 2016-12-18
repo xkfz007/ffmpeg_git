@@ -1,0 +1,240 @@
+#!/bin/bash
+#set -e
+set -x
+add_x(){
+    file=$1
+    if [ ! -x $file ];then
+        chmod u+x $file
+    fi
+}
+
+#check system
+sys=$(uname -o)
+if [[ $sys =~ "Cygwin" ]];then
+    echo "sys="$sys
+    SYS_NAME="cygwin"
+elif [[ $sys =~ "Linux" ]];then
+    echo "sys="$sys
+    SYS_NAME="linux"
+fi
+
+#check configuration
+CONF="RELEASE"
+if [ $# -ge 1 ];then
+    CONF=$(echo $1|tr '[a-z]' '[A-Z]')
+fi
+
+CONF_LIST=("RELEASE" "DEBUG")
+
+FOUND=0
+for i in ${CONF_LIST[@]}
+do
+    if [ "$i" == "$CONF" ];then
+        FOUND=1
+        break
+    fi
+done
+
+if [ $FOUND -eq 0 ];then
+    CONF="RELEASE"
+fi
+
+#check directories
+CURRENT_DIR=`pwd`
+ROOT_DIR=`readlink -f "$CURRENT_DIR/../"`
+SOURCE_DIR="$ROOT_DIR/source"
+EXTERNAL_LIBS_DIR=`readlink -f "$ROOT_DIR/../external_libs"`
+if [ ! -e $PKG_DIR ];then
+    echo "ERROR: ${EXTERNAL_LIBS_DIR} does not exist"
+    exit
+fi
+
+LIB_DIR="${EXTERNAL_LIBS_DIR}/${SYS_NAME}/lib"
+INC_DIR="${EXTERNAL_LIBS_DIR}/${SYS_NAME}/include"
+
+PKG_DIR="${ROOT_DIR}/build/pkgconfig"
+if [ ! -e $PKG_DIR ];then
+    mkdir $PKG_DIR
+fi
+PKG_INTERNAL="$LIB_DIR/internal_pc"
+export PKG_CONFIG_PATH="$PKG_GONFIG_PATH:${PKG_DIR}"
+PKG_PREFIX="${EXTERNAL_LIBS_DIR}/${SYS_NAME}"
+
+X264_ENABLED=1
+X265_ENABLED=1
+VPX_ENABLED=0
+FDKAAC_ENABLED=0
+XVID_ENABLED=0
+FREETYPE_ENABLED=0
+FONTCONFIG_ENABLED=0
+LIBASS_ENABLED=0
+
+pkgconfig_generate(){
+    name=$1
+    pkg_dir=$2
+    pkg_internal_dir=$3
+    prefix=$4
+    pkg_internal_file="${pkg_internal_dir}/${name}.ipc"
+    pkg_file="${pkg_dir}/${name}.pc"
+    if [ ! -e $pkg_internal_file ];then
+        echo "ERROR: $pkg_internal_file does not exist"
+        exit
+    fi
+    cat <<EOF  >$pkg_file
+prefix=$prefix
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+EOF
+   cat $pkg_internal_file >>$pkg_file
+}
+
+if [ $X264_ENABLED = "1" ];then
+    pkgconfig_generate x264       "$PKG_DIR" "$PKG_INTERNAL" "$PKG_PREFIX" 
+fi
+if [ $X265_ENABLED = "1" ];then
+    pkgconfig_generate x265       "$PKG_DIR" "$PKG_INTERNAL" "$PKG_PREFIX"
+fi
+if [ $LIBASS_ENABLED = "1" ];then
+    pkgconfig_generate libass     "$PKG_DIR" "$PKG_INTERNAL" "$PKG_PREFIX"
+fi
+if [ $FONTCONFIG_ENABLED = "1" ];then
+    pkgconfig_generate fontconfig "$PKG_DIR" "$PKG_INTERNAL" "$PKG_PREFIX"
+fi
+if [ $FREETYPE_ENABLED = "1" ];then
+    pkgconfig_generate freetype2  "$PKG_DIR" "$PKG_INTERNAL" "$PKG_PREFIX"
+fi
+
+add_x ${SOURCE_DIR}/configure
+add_x ${SOURCE_DIR}/version.sh
+
+BUILDS_DIR="${ROOT_DIR}/build/$CONF"
+if [ ! -e $BUILDS_DIR ];then
+    mkdir $BUILDS_DIR
+fi
+
+cd ${BUILDS_DIR}
+
+
+FFVERSION=$(cat ${SOURCE_DIR}/VERSION)
+SDL_VERSION='sdl'
+if [[ "$FFVERSION" == "N-"* ]];then
+    SDL_VERSION='sdl2'
+fi
+
+cmd="${SOURCE_DIR}/configure  \
+    --prefix=${BUILDS_DIR} \
+    --pkg-config-flags=\"--static\" \
+    --extra-ldflags=\"-L${LIB_DIR}\" \
+    --extra-cflags=\"-I${INC_DIR}\" \
+"
+cmd=${cmd}"--disable-doc       \
+    --disable-htmlpages        \
+    --disable-manpages         \
+    --disable-podpages         \
+    --disable-txtpages         \
+    --disable-ffplay           \
+    --disable-ffserver         \
+    --disable-shared           \
+    --disable-d3d11va          \
+    --disable-dxva2            \
+    --disable-vaapi            \
+    --disable-vda              \
+    --disable-vdpau            \
+    --disable-videotoolbox     \
+    --disable-bzlib            \
+    --disable-iconv            \
+    --disable-libxcb           \
+    --disable-libxcb-shm       \
+    --disable-libxcb-xfixes    \
+    --disable-libxcb-shape     \
+    --disable-lzma             \
+    --disable-xlib             \
+    --disable-zlib             \
+    --disable-schannel         \
+    --disable-securetransport  \
+    --disable-${SDL_VERSION}   \
+    --disable-outdevs          \
+    --disable-indevs           \
+"
+
+cmd=${cmd}"--enable-gpl --enable-nonfree --enable-static --enable-indev=lavfi"
+if [ $X264_ENABLED = "1" ];then
+    cmd=${cmd}" --enable-libx264"
+fi
+if [ $X265_ENABLED = "1" ];then
+    cmd=${cmd}" --enable-libx265"
+fi
+if [ $FDKAAC_ENABLED = "1" ];then
+    cmd=${cmd}" --enable-libfdk_aac"
+fi
+if [ $VPX_ENABLED = "1" ];then
+    cmd=${cmd}" --enable-libvpx"
+fi
+if [ $XVID_ENABLED = "1" ];then
+    cmd=${cmd}" --enable-libxvid"
+fi
+if [ $FONTCONFIG_ENABLED = "1" ];then
+    cmd=${cmd}" --enable-libfontconfig"
+fi
+if [ $FREETYPE_ENABLED = "1" ];then
+    cmd=${cmd}" --enable-libfreetype"
+fi
+if [ $LIBASS_ENABLED = "1" ];then
+    cmd=${cmd}" --enable-libass"
+fi
+
+if [ "$CONF" = "DEBUG"  ];then
+    cmd="$cmd --disable-optimizations --disable-stripping --disable-asm --disable-pthreads"
+fi
+echo $cmd
+eval $cmd
+
+config_file="config.h"
+if [ ! -e $config_file  ];then
+    echo "ERROR: ${config_file} does not exist"
+    exit
+fi
+
+# modify the config.h for cygwin
+function replace_macro
+{
+    def=$1
+    f=$2
+    sed -i "s/.*$def.*/#define $def 0/g" $f
+}
+
+#sed -i "s/.*HAVE_ARC4RANDOM.*/#define HAVE_ARC4RANDOM 0/g" config.h
+
+if [ "$SYS_NAME" = "cygwin" ];then
+    replace_macro "HAVE_ARC4RANDOM"     "$config_file"
+    replace_macro "HAVE_GETTIMEOFDAY"   "$config_file"
+    replace_macro "HAVE_GLOB"           "$config_file"
+    replace_macro "CONFIG_DOC"          "$config_file"
+    replace_macro "HAVE_TERMIOS_H"      "$config_file"
+fi
+
+
+#add defines.h to config.h
+def_file="defines.h"
+if [ -e "$def_file" ];then
+    line="#include \"$def_file\""
+    cnt=$(grep -n "$line" $config_file|wc -l)
+    #echo $cnt
+    #cmd1="grep -n \"$line\" $config_file|wc -l"
+    #echo $cmd1
+    #eval $cmd1
+    if [ $cnt -eq 0 ];then
+        #echo "defines.h will be included by config.h"
+        sed -i '$i'"$line" $config_file 
+    elif [ $cnt -eq 1 ];then
+        echo "defines.h has already been included by config.h"
+    else
+        echo "WARNING:Too many including of defines.h in config.h, please check"
+    fi
+fi
+
+make
+make install
+cd -

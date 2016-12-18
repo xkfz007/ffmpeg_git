@@ -1,0 +1,12 @@
+#!/bin/bash
+./configure \
+    --disable-ffplay \
+    --disable-ffprobe \
+    --disable-ffserver \
+    --disable-optimizations \
+    --disable-stripping \
+    --disable-asm \
+    --enable-libx264 \
+    --enable-gpl \
+    --enable-nonfree \
+

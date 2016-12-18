@@ -4864,13 +4864,82 @@ FF_ENABLE_DEPRECATION_WARNINGS
             if (s->programs[i]->id != prog_id)
                 continue;
 
+            //+: stream index of specified program
             if (*endptr++ == ':') {
+#if MAP_SUPPORT_STREAMTYPE
+                av_log(s,AV_LOG_DEBUG,"endprt=%s",endptr);
+                if (*endptr<= '9' && *endptr>= '0') {
+#endif
                 int stream_idx = strtol(endptr, NULL, 0);
                 return stream_idx >= 0 &&
                     stream_idx < s->programs[i]->nb_stream_indexes &&
                     st->index == s->programs[i]->stream_index[stream_idx];
+#if MAP_SUPPORT_STREAMTYPE
+                }
+                else if (*endptr == 'v' || *endptr == 'a' || *endptr == 's' || *endptr == 'd' ||
+                    *endptr == 't' || *endptr == 'V') {
+                        enum AVMediaType type;
+                        int nopic = 0;
+
+                        switch (*spec++) {
+                            case 'v': type = AVMEDIA_TYPE_VIDEO;      break;
+                            case 'a': type = AVMEDIA_TYPE_AUDIO;      break;
+                            case 's': type = AVMEDIA_TYPE_SUBTITLE;   break;
+                            case 'd': type = AVMEDIA_TYPE_DATA;       break;
+                            case 't': type = AVMEDIA_TYPE_ATTACHMENT; break;
+                            case 'V': type = AVMEDIA_TYPE_VIDEO; nopic = 1; break;
+                            default:  av_assert0(0);
+                        }
+#if FF_API_LAVF_AVCTX
+                        FF_DISABLE_DEPRECATION_WARNINGS
+                            if (type != st->codecpar->codec_type
+                                && (st->codecpar->codec_type != AVMEDIA_TYPE_UNKNOWN || st->codec->codec_type != type))
+                                return 0;
+                        FF_ENABLE_DEPRECATION_WARNINGS
+#else
+                        if (type != st->codecpar->codec_type)
+                            return 0;
+#endif
+                        if (nopic && (st->disposition & AV_DISPOSITION_ATTACHED_PIC))
+                            return 0;
+
+                        for (j = 0; j < s->programs[i]->nb_stream_indexes; j++)
+                            if (st->index != s->programs[i]->stream_index[j])
+                                continue;
+                        //+: did not find the stream index from program stream list
+                        if(j==s->programs[i]->nb_stream_indexes)
+                            return 0;
+
+                        if (*spec++ == ':') { /* possibly followed by :index */
+                            int k, index = strtol(spec, NULL, 0);
+                            for (k = 0; k < s->programs[i]->nb_stream_indexes; k++) {
+                                int ps_idx=s->programs[i]->stream_index[k];//stream index of program
+#if FF_API_LAVF_AVCTX
+                                FF_DISABLE_DEPRECATION_WARNINGS
+                                    if ((s->streams[ps_idx]->codecpar->codec_type == type
+                                        || s->streams[ps_idx]->codec->codec_type == type
+                                        ) &&
+                                        !(nopic && (st->disposition & AV_DISPOSITION_ATTACHED_PIC)) &&
+                                        index-- == 0)
+                                        return ps_idx == st->index;
+                                FF_ENABLE_DEPRECATION_WARNINGS
+#else
+                                if ((s->streams[ps_idx]->codecpar->codec_type == type) &&
+                                    !(nopic && (st->disposition & AV_DISPOSITION_ATTACHED_PIC)) &&
+                                    index-- == 0)
+                                    return ps_idx == st->index;
+#endif
+                            }
+                            return 0;
+                        }
+                        return 1;
+                }
+                else
+                    return 0;
+#endif
             }
 
+            //+: find the right stream from streams of this program
             for (j = 0; j < s->programs[i]->nb_stream_indexes; j++)
                 if (st->index == s->programs[i]->stream_index[j])
                     return 1;
@@ -4958,6 +5027,239 @@ FF_ENABLE_DEPRECATION_WARNINGS
     av_log(s, AV_LOG_ERROR, "Invalid stream specifier: %s.\n", spec);
     return AVERROR(EINVAL);
 }
+
+#if 0
+static avforamt_match_stream_specifier_internal(AVFormatContext *s, AVStream *st,
+                                                const char *spec)
+{
+    enum AVMediaType type;
+    int nopic = 0;
+
+    av_log(s,AV_LOG_DEBUG,"Specifier=%s",spec);
+    switch (*spec++) {
+        case 'v': type = AVMEDIA_TYPE_VIDEO;      break;
+        case 'a': type = AVMEDIA_TYPE_AUDIO;      break;
+        case 's': type = AVMEDIA_TYPE_SUBTITLE;   break;
+        case 'd': type = AVMEDIA_TYPE_DATA;       break;
+        case 't': type = AVMEDIA_TYPE_ATTACHMENT; break;
+        case 'V': type = AVMEDIA_TYPE_VIDEO; nopic = 1; break;
+        default:  av_assert0(0);
+    }
+#if FF_API_LAVF_AVCTX
+    FF_DISABLE_DEPRECATION_WARNINGS
+        if (type != st->codecpar->codec_type
+            && (st->codecpar->codec_type != AVMEDIA_TYPE_UNKNOWN || st->codec->codec_type != type))
+            return 0;
+    FF_ENABLE_DEPRECATION_WARNINGS
+#else
+    if (type != st->codecpar->codec_type)
+        return 0;
+#endif
+    if (nopic && (st->disposition & AV_DISPOSITION_ATTACHED_PIC))
+        return 0;
+    if (*spec++ == ':') { /* possibly followed by :index */
+        int i, index = strtol(spec, NULL, 0);
+        for (i = 0; i < s->nb_streams; i++) {
+#if FF_API_LAVF_AVCTX
+            FF_DISABLE_DEPRECATION_WARNINGS
+                if ((s->streams[i]->codecpar->codec_type == type
+                    || s->streams[i]->codec->codec_type == type
+                    ) &&
+                    !(nopic && (st->disposition & AV_DISPOSITION_ATTACHED_PIC)) &&
+                    index-- == 0)
+                    return i == st->index;
+            FF_ENABLE_DEPRECATION_WARNINGS
+#else
+            if ((s->streams[i]->codecpar->codec_type == type) &&
+                !(nopic && (st->disposition & AV_DISPOSITION_ATTACHED_PIC)) &&
+                index-- == 0)
+                return i == st->index;
+#endif
+        }
+        return 0;
+    }
+    return 1;
+
+}
+
+int avformat_match_stream_specifier2(AVFormatContext *s, AVStream *st,
+                                     const char *spec)
+{
+    if (*spec <= '9' && *spec >= '0') /* opt:index */
+        return strtol(spec, NULL, 0) == st->index;
+    else if (*spec == 'v' || *spec == 'a' || *spec == 's' || *spec == 'd' ||
+        *spec == 't' || *spec == 'V') { /* opt:[vasdtV] */
+            return avforamt_match_stream_specifier_internal(s,st,spec);
+    } else if (*spec == 'p' && *(spec + 1) == ':') {
+        int prog_id, i, j;
+        char *endptr;
+        spec += 2;
+        prog_id = strtol(spec, &endptr, 0);
+        for (i = 0; i < s->nb_programs; i++) {
+            if (s->programs[i]->id != prog_id)
+                continue;
+
+            //+: stream index of specified program
+            if (*endptr++ == ':') {
+                av_log(s,AV_LOG_DEBUG,"endprt=%s",endptr);
+                if (*endptr<= '9' && *endptr>= '0') {
+                    int stream_idx = strtol(endptr, NULL, 0);
+                    return stream_idx >= 0 &&
+                        stream_idx < s->programs[i]->nb_stream_indexes &&
+                        st->index == s->programs[i]->stream_index[stream_idx];
+                }
+                else if (*endptr == 'v' || *endptr == 'a' || *endptr == 's' || *endptr == 'd' ||
+                    *endptr == 't' || *endptr == 'V') {
+                        enum AVMediaType type;
+                        int nopic = 0;
+
+                        switch (*spec++) {
+                            case 'v': type = AVMEDIA_TYPE_VIDEO;      break;
+                            case 'a': type = AVMEDIA_TYPE_AUDIO;      break;
+                            case 's': type = AVMEDIA_TYPE_SUBTITLE;   break;
+                            case 'd': type = AVMEDIA_TYPE_DATA;       break;
+                            case 't': type = AVMEDIA_TYPE_ATTACHMENT; break;
+                            case 'V': type = AVMEDIA_TYPE_VIDEO; nopic = 1; break;
+                            default:  av_assert0(0);
+                        }
+#if FF_API_LAVF_AVCTX
+                        FF_DISABLE_DEPRECATION_WARNINGS
+                            if (type != st->codecpar->codec_type
+                                && (st->codecpar->codec_type != AVMEDIA_TYPE_UNKNOWN || st->codec->codec_type != type))
+                                return 0;
+                        FF_ENABLE_DEPRECATION_WARNINGS
+#else
+                        if (type != st->codecpar->codec_type)
+                            return 0;
+#endif
+                        if (nopic && (st->disposition & AV_DISPOSITION_ATTACHED_PIC))
+                            return 0;
+
+                        for (j = 0; j < s->programs[i]->nb_stream_indexes; j++)
+                            if (st->index != s->programs[i]->stream_index[j])
+                                continue;
+                        //+: did not find the stream index from program stream list
+                        if(j==s->programs[i]->nb_stream_indexes)
+                            return 0;
+
+                        if (*spec++ == ':') { /* possibly followed by :index */
+                            int k, index = strtol(spec, NULL, 0);
+                            for (k = 0; k < s->programs[i]->nb_stream_indexes; k++) {
+                                int ps_idx=s->programs[i]->stream_index[k];//stream index of program
+#if FF_API_LAVF_AVCTX
+                                FF_DISABLE_DEPRECATION_WARNINGS
+                                    if ((s->streams[ps_idx]->codecpar->codec_type == type
+                                        || s->streams[ps_idx]->codec->codec_type == type
+                                        ) &&
+                                        !(nopic && (st->disposition & AV_DISPOSITION_ATTACHED_PIC)) &&
+                                        index-- == 0)
+                                        return ps_idx == st->index;
+                                FF_ENABLE_DEPRECATION_WARNINGS
+#else
+                                if ((s->streams[ps_idx]->codecpar->codec_type == type) &&
+                                    !(nopic && (st->disposition & AV_DISPOSITION_ATTACHED_PIC)) &&
+                                    index-- == 0)
+                                    return ps_idx == st->index;
+#endif
+                            }
+                            return 0;
+                        }
+                        return 1;
+                }
+                else
+                    return 0;
+
+            }
+
+            //+: find the right stream from streams of this program
+            for (j = 0; j < s->programs[i]->nb_stream_indexes; j++)
+                if (st->index == s->programs[i]->stream_index[j])
+                    return 1;
+        }
+        return 0;
+    } else if (*spec == '#' ||
+        (*spec == 'i' && *(spec + 1) == ':')) {
+            int stream_id;
+            char *endptr;
+            spec += 1 + (*spec == 'i');
+            stream_id = strtol(spec, &endptr, 0);
+            if (!*endptr)
+                return stream_id == st->id;
+    } else if (*spec == 'm' && *(spec + 1) == ':') {
+        AVDictionaryEntry *tag;
+        char *key, *val;
+        int ret;
+
+        spec += 2;
+        val = strchr(spec, ':');
+
+        key = val ? av_strndup(spec, val - spec) : av_strdup(spec);
+        if (!key)
+            return AVERROR(ENOMEM);
+
+        tag = av_dict_get(st->metadata, key, NULL, 0);
+        if (tag) {
+            if (!val || !strcmp(tag->value, val + 1))
+                ret = 1;
+            else
+                ret = 0;
+        } else
+            ret = 0;
+
+        av_freep(&key);
+        return ret;
+    } else if (*spec == 'u') {
+        AVCodecParameters *par = st->codecpar;
+#if FF_API_LAVF_AVCTX
+        FF_DISABLE_DEPRECATION_WARNINGS
+            AVCodecContext *codec = st->codec;
+        FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+            int val;
+        switch (par->codec_type) {
+        case AVMEDIA_TYPE_AUDIO:
+            val = par->sample_rate && par->channels;
+#if FF_API_LAVF_AVCTX
+            val = val || (codec->sample_rate && codec->channels);
+#endif
+            if (par->format == AV_SAMPLE_FMT_NONE
+#if FF_API_LAVF_AVCTX
+                && codec->sample_fmt == AV_SAMPLE_FMT_NONE
+#endif
+                )
+                return 0;
+            break;
+        case AVMEDIA_TYPE_VIDEO:
+            val = par->width && par->height;
+#if FF_API_LAVF_AVCTX
+            val = val || (codec->width && codec->height);
+#endif
+            if (par->format == AV_PIX_FMT_NONE
+#if FF_API_LAVF_AVCTX
+                && codec->pix_fmt == AV_PIX_FMT_NONE
+#endif
+                )
+                return 0;
+            break;
+        case AVMEDIA_TYPE_UNKNOWN:
+            val = 0;
+            break;
+        default:
+            val = 1;
+            break;
+        }
+#if FF_API_LAVF_AVCTX
+        return (par->codec_id != AV_CODEC_ID_NONE || codec->codec_id != AV_CODEC_ID_NONE) && val != 0;
+#else
+        return par->codec_id != AV_CODEC_ID_NONE && val != 0;
+#endif
+    } else if (!*spec) /* empty specifier, matches everything */
+        return 1;
+
+    av_log(s, AV_LOG_ERROR, "Invalid stream specifier: %s.\n", spec);
+    return AVERROR(EINVAL);
+}
+#endif
 
 int ff_generate_avci_extradata(AVStream *st)
 {

@@ -219,7 +219,7 @@ static int mpegts_write_section1(MpegTSSection *s, int tid, int id,
 /*********************************************/
 /* mpegts writer */
 
-#define DEFAULT_PROVIDER_NAME   "FFmpeg"
+#define DEFAULT_PROVIDER_NAME   "FFmpeg"      //+:this can be changed 
 #define DEFAULT_SERVICE_NAME    "Service01"
 
 /* we retransmit the SI info at this rate */

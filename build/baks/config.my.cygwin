@@ -1,0 +1,10 @@
+./configure \
+--enable-gpl \
+--enable-version3 \
+--disable-shared \
+--disable-debug \
+--enable-runtime-cpudetect \
+--enable-libx264 \
+--enable-libx265 \
+--disable-ffserver \
+--disable-doc

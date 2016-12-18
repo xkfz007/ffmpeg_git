@@ -110,6 +110,9 @@ const char program_name[] = "ffmpeg";
 const int program_birth_year = 2000;
 
 static FILE *vstats_file;
+#if ENABLE_QUIT
+static int do_exit_all=0;
+#endif
 
 const char *const forced_keyframes_const_names[] = {
     "n",
@@ -594,8 +597,10 @@ static void ffmpeg_cleanup(int ret)
     } else if (ret && transcode_init_done) {
         av_log(NULL, AV_LOG_INFO, "Conversion failed!\n");
     }
+#if !WRAP_FFMPEG
     term_exit();
     ffmpeg_exited = 1;
+#endif
 }
 
 void remove_avoptions(AVDictionary **a, AVDictionary *b)
@@ -1761,6 +1766,24 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
         av_bprintf(&buf_script, "speed=%4.3gx\n", speed);
     }
 
+#if PRINT_PROCESSED
+    {
+    	AVFormatContext *ic;
+    	ic = input_files[0]->ctx;
+//    	av_log(NULL, AV_LOG_INFO, "%"PRId64" %"PRId64"\n", ic->duration,AV_NOPTS_VALUE);
+    	if (ic->duration != AV_NOPTS_VALUE) {
+    		int64_t duration = ic->duration + (ic->duration <= INT64_MAX - 5000 ? 5000 : 0);
+    		double processed=(double)pts/duration;
+    		snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf)," processed=%.2f%%", processed*100);
+    		av_bprintf(&buf_script, "processed=%.2f%%\n",processed*100);
+    	} else {
+    		snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf)," processed=N/A");
+    		av_bprintf(&buf_script, "processed=N/A\n");
+    	}
+    }
+
+#endif
+
     if (print_stats || is_last_report) {
         const char end = is_last_report ? '\n' : '\r';
         if (print_stats==1 && AV_LOG_INFO > av_log_get_level()) {
@@ -2185,6 +2208,8 @@ static int decode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
             }
     }
 
+    //+: if the decoder provides a pts, use it instead of the last packet pts.
+    //+: the decoder could be delaying output by a packet or more. 
     if (decoded_frame->pts != AV_NOPTS_VALUE) {
         decoded_frame_tb   = ist->st->time_base;
     } else if (pkt && pkt->pts != AV_NOPTS_VALUE) {
@@ -2974,7 +2999,7 @@ static int init_output_stream_streamcopy(OutputStream *ost)
 
     return 0;
 }
-
+//+: set encoder id to container
 static void set_encoder_id(OutputFile *of, OutputStream *ost)
 {
     AVDictionaryEntry *e;
@@ -3010,10 +3035,10 @@ static void set_encoder_id(OutputFile *of, OutputStream *ost)
     if (!(format_flags & AVFMT_FLAG_BITEXACT) && !(codec_flags & AV_CODEC_FLAG_BITEXACT))
         av_strlcpy(encoder_string, LIBAVCODEC_IDENT " ", encoder_string_len);
     else
-        av_strlcpy(encoder_string, "Lavc ", encoder_string_len);
+        av_strlcpy(encoder_string, "Lavc ", encoder_string_len);//+: encoder library version
     av_strlcat(encoder_string, ost->enc->name, encoder_string_len);
     av_dict_set(&ost->st->metadata, "encoder",  encoder_string,
-                AV_DICT_DONT_STRDUP_VAL | AV_DICT_DONT_OVERWRITE);
+                AV_DICT_DONT_STRDUP_VAL | AV_DICT_DONT_OVERWRITE); //+: write encoder version to metadata
 }
 
 static void parse_forced_key_frames(char *kf, OutputStream *ost,
@@ -3677,6 +3702,12 @@ static int check_keyboard_interaction(int64_t cur_time)
         key = -1;
     if (key == 'q')
         return AVERROR_EXIT;
+#if ENABLE_QUIT
+    if (key == 'Q'){
+    	do_exit_all=1;
+        return AVERROR_EXIT;
+    }
+#endif
     if (key == '+') av_log_set_level(av_log_get_level()+10);
     if (key == '-') av_log_set_level(av_log_get_level()-10);
     if (key == 's') qp_hist     ^= 1;
@@ -3986,7 +4017,7 @@ static int seek_to_start(InputFile *ifile, AVFormatContext *is)
                                         ifile->time_base);
     }
 
-    if (ifile->loop > 0)
+    if (ifile->loop > 0)//+: if loop is <=0, this is infinit loop
         ifile->loop--;
 
     return ret;
@@ -4019,6 +4050,7 @@ static int process_input(int file_index)
     if (ret < 0 && ifile->loop) {
         if ((ret = seek_to_start(ifile, is)) < 0)
             return ret;
+		//+:bug fixed after v3.2, to be compatible with -re
         ret = get_input_packet(ifile, &pkt);
         if (ret == AVERROR(EAGAIN)) {
             ifile->eagain = 1;
@@ -4523,8 +4555,11 @@ static int64_t getmaxrss(void)
 static void log_callback_null(void *ptr, int level, const char *fmt, va_list vl)
 {
 }
-
+#if WRAP_FFMPEG
+static int ff_main(int argc, char **argv)
+#else
 int main(int argc, char **argv)
+#endif
 {
     int i, ret;
     int64_t ti;
@@ -4594,6 +4629,269 @@ int main(int argc, char **argv)
     if ((decode_error_stat[0] + decode_error_stat[1]) * max_error_rate < decode_error_stat[1])
         exit_program(69);
 
+#if !WRAP_FFMPEG
     exit_program(received_nb_signals ? 255 : main_return_code);
+#else
+    ffmpeg_cleanup(received_nb_signals ? 255 : main_return_code);
+#endif
     return main_return_code;
 }
+
+#if WRAP_FFMPEG
+#include "ff_glob.h"
+//#include <string.h>
+//#if !HAVE_GETOPT
+//#include "compat/getopt.c"
+//#endif
+
+#define OUTPUT_NUM 20
+static const char* valid_extensions=".mp4,.mkv,.flv,.avi,.ts,.wmv,.f4v";
+
+static void print_cmdline(int argc,char*argv[],int input_ind,int* otag_list,int output_cnt){
+	int j;
+	for(j=0;j<argc;j++){
+		int k;
+		int quotation_flag=0;
+		if(j==input_ind)
+			quotation_flag=1;
+		if(!quotation_flag)
+			for(k=0;k<output_cnt;k++)
+				if(j==otag_list[k]) {
+					quotation_flag=1;
+					break;
+				}
+		if(quotation_flag)
+			av_log(NULL,AV_LOG_INFO,"'");
+		av_log(NULL,AV_LOG_INFO,"%s",argv[j]);
+		if(quotation_flag)
+			av_log(NULL,AV_LOG_INFO,"'");
+		av_log(NULL,AV_LOG_INFO," ");
+	}
+	av_log(NULL,AV_LOG_INFO,"\n");
+}
+static void ff_init(){
+
+	run_as_daemon  = 0;
+	nb_frames_dup = 0;
+	nb_frames_drop = 0;
+	decode_error_stat[0]=0;
+	decode_error_stat[1]=0;
+
+	current_time=0;
+	progress_avio = NULL;
+
+	subtitle_out=NULL;
+
+	input_streams = NULL;
+	nb_input_streams = 0;
+	input_files   = NULL;
+	nb_input_files   = 0;
+
+	output_streams = NULL;
+	nb_output_streams = 0;
+	output_files   = NULL;
+	nb_output_files   = 0;
+
+	filtergraphs=NULL;
+	nb_filtergraphs=0;
+
+}
+static void ff_exit(){
+    ffmpeg_exited = 1;
+}
+static void ff_execute(int argc,char*argv[],int input_ind,int* otag_list,int output_cnt,int do_execute){
+	static int i=0;
+	av_log(NULL,AV_LOG_INFO,"Command line %2d:\n\t",i++);
+	print_cmdline(argc,argv,input_ind,otag_list,output_cnt);
+
+	if(do_execute){
+		ff_init();
+		ff_main(argc,argv);
+	}
+
+}
+
+static int cmp(const void*a,const void*b){
+	return strcmp(*(char**)a,*(char**)b);
+}
+int main(int argc, char* argv[]){
+	int i;
+	const char *patterns=NULL;
+//	const char *options;
+	const char *output_tag[OUTPUT_NUM];
+	int otag_list[OUTPUT_NUM];
+	int input_ind=-1; //the index option '-i'
+	char outfilename[OUTPUT_NUM][256];
+	char **input_filelist=NULL;
+	char* argv_internal[200];
+	int argc_internal=0;
+	int output_cnt=0; //output files numbers
+	int do_execute=0;
+	struct stat sb;
+//	int is_livestream=0;
+	int inputfile_num=0;
+	int ret;
+
+	if(argc<2) {
+		show_ffconvert_usage();
+		exit(1);
+	}
+
+	//set loglevel
+	for(i=0;i<argc;i++){
+		if(!strcmp(argv[i],"-v")||!strcmp(argv[i],"-loglevel")){
+			opt_loglevel(NULL,"loglevel",argv[i+1]);
+			break;
+		}
+	}
+
+    avcodec_register_all();
+#if CONFIG_AVDEVICE
+    avdevice_register_all();
+#endif
+    avfilter_register_all();
+    av_register_all();
+
+    ret=ffmpeg_parse_options_inadvance(argc,argv,&argc_internal,argv_internal,
+    		output_tag,otag_list,&output_cnt,&input_ind,&patterns);
+
+	if(ret==FFERROR_OPTION_NOT_FOUND) {
+		av_log(NULL,AV_LOG_ERROR,"Could not find option\n");
+		show_ffconvert_usage();
+		exit(1);
+	}else if(ret==FFERROR_NO_INPUT||ret==FFERROR_MULTI_INPUT||ret==FF_TEE_OUTPUT){ //if there is no input, use the original ffmpeg
+		//	if(!patterns||input_ind<=0){
+//		av_log(NULL,AV_LOG_INFO,"There are multi inputs, use the original ffmpeg\n");
+		av_log(NULL,AV_LOG_INFO,"Using the original ffmpeg\n");
+		ff_main(argc,argv);
+		ff_exit();
+		exit(1);
+	}else{
+		do_execute=ret;
+	}
+//	else if(ret==FFERROR_INPUT_IS_LIVE){ //we will use the original ffmepg
+////	if(is_livestream){
+//    	ff_execute(argc_internal,argv_internal,input_ind,otag_list,output_cnt,do_execute);
+//    	ff_exit();
+//    	exit(-1);
+//	}
+//	else if(ret==FF_DO_EXECUTE){
+//		do_execute
+//
+//	}
+
+	//parse patterns to get all the files
+	input_filelist= ff_glob_filename (patterns, 1);
+
+	if(!input_filelist){
+		av_log(NULL,AV_LOG_ERROR,"Could not find files\n");
+		show_ffconvert_usage();
+		exit(1);
+	}
+
+	//count files in the filelist
+	for(i=0;input_filelist[i];i++);
+
+	inputfile_num=i;
+
+	//sort files in the list
+	qsort(input_filelist,inputfile_num,sizeof(char*),cmp);
+
+	av_log(NULL,AV_LOG_INFO,"File list(%d):\n",inputfile_num);
+	for(i=0;i<inputfile_num;i++){
+		av_log(NULL,AV_LOG_INFO,"\t%2d:%s\n",i,input_filelist[i]);
+	}
+
+    for(i=0;i<inputfile_num;i++){
+    	size_t len,in_ext_len;
+    	char*infilename,*in_ext;
+    	int j;
+
+#if ENABLE_QUIT
+    	if(do_exit_all)
+    		break;
+#endif
+
+    	infilename=input_filelist[i];
+    	//    	if(!is_livestream){
+    	//check if it is a directory or a file
+    	if (lstat(infilename, &sb) == -1) {
+    		av_log(NULL,AV_LOG_ERROR,"Could not stat file/directory %s\n",infilename);
+    		exit(1);
+    	}
+    	if(S_ISDIR(sb.st_mode)){
+    		av_log(NULL,AV_LOG_WARNING,"%s is a directory, pass\n",infilename);
+    		continue;
+    	}
+    	//    	}
+
+    	len=strlen(infilename);
+    	in_ext=strrchr(infilename,'.');
+    	if(!in_ext) {
+    		av_log(NULL,AV_LOG_ERROR,"No extension in '%s'\n",infilename);
+    		exit(1);
+    	}
+
+    	in_ext_len=strlen(in_ext);
+    	av_log(NULL,AV_LOG_DEBUG,"len=%d in_ext=%s output_cnt=%d\n",len,in_ext,output_cnt);
+    	for(j=0;j<output_cnt;j++){
+    		char* outname=NULL;
+    		char* out_ext=NULL;
+    		int out_ext_len;
+    		memset(outfilename[j],0,256*sizeof(char));
+    		outname=outfilename[j];
+    		av_log(NULL,AV_LOG_DEBUG,"1:outname=%s out_ext=%s\n",outname,out_ext?out_ext:"NULL");
+    		if(!strncmp(output_tag[j],"udp:",4)||
+    				!strncmp(output_tag[j],"rtmp:",5)||
+					!strncmp(output_tag[j],"http:",5)||
+					!strncmp(output_tag[j],"rtsp:",5)){
+    			av_log(NULL,AV_LOG_INFO,"Output is live stream.\n");
+    			strcat(outname,output_tag[j]);
+    		}else{
+    			out_ext=strrchr(output_tag[j],'.');//a.ts, .ts, out,
+    			av_log(NULL,AV_LOG_DEBUG,"2:outname=%s out_ext=%s\n",outname,out_ext?out_ext:"NULL");
+
+    			if(out_ext&&out_ext!=output_tag[j]){//Not .ts
+    				strcat(outname,output_tag[j]);
+    				av_log(NULL,AV_LOG_DEBUG,"3-1:outname=%s out_ext=%s\n",outname,out_ext?out_ext:"NULL");
+    			}
+    			else{//out_ext==outpu_tag[j]: .ts
+    				// or out_ext==NULL
+    				strncpy(outname,infilename,len-in_ext_len);
+    				av_log(NULL,AV_LOG_DEBUG,"3-2:outname=%s out_ext=%s\n",outname,out_ext?out_ext:"NULL");
+    				if(!out_ext){//no extension, regard as tag
+    					strcat(outname,"_");
+    					strcat(outname,output_tag[j]);
+    					out_ext=in_ext;
+    				}
+    				strcat(outname,out_ext);//,out_ext_len);
+    				av_log(NULL,AV_LOG_DEBUG,"4:outname=%s out_ext=%s\n",outname,out_ext?out_ext:"NULL");
+    			}
+    			av_log(NULL,AV_LOG_DEBUG,"5:outname=%s out_ext=%s\n",outname,out_ext?out_ext:"NULL");
+    		}
+            if(!strcmp(infilename,outname)){
+                sprintf(outname+len-in_ext_len,"_out%s",out_ext);
+    			av_log(NULL,AV_LOG_ERROR,"Output filename is same with input filename, changed to '%s'\n",outname);
+            }
+    		argv_internal[otag_list[j]]=outname;
+    	}
+
+    	//set the input filename to the proper position
+    	argv_internal[input_ind]=infilename;
+
+    	ff_execute(argc_internal,argv_internal,input_ind,otag_list,output_cnt,do_execute);
+    }
+
+fail:
+	//free the memory
+    if(input_filelist){
+    	for(i=0;input_filelist[i];i++)
+    		free((char*)input_filelist[i]);
+    	free((char*)input_filelist);
+    }
+    ff_exit();
+    return 0;
+}
+
+
+#endif

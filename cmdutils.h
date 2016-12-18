@@ -93,7 +93,9 @@ int opt_cpuflags(void *optctx, const char *opt, const char *arg);
  * parsed through AVOptions.
  */
 int opt_default(void *optctx, const char *opt, const char *arg);
-
+#if WRAP_FFMPEG
+int find_avoption(void *optctx, const char *opt, const char *arg);
+#endif
 /**
  * Set the libav* libraries log level.
  */
@@ -193,6 +195,10 @@ typedef struct OptionDef {
     const char *help;
     const char *argname;
 } OptionDef;
+
+#if WRAP_FFMPEG
+const OptionDef *find_option(const OptionDef *po, const char *name);
+#endif
 
 /**
  * Print help for all options matching specified flags.

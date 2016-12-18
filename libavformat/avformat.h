@@ -1401,7 +1401,7 @@ typedef struct AVFormatContext {
      * - demuxing: set by avformat_open_input()
      * - muxing: may be set by the caller before avformat_write_header()
      */
-    char filename[1024];
+    char filename[OUTPUT_FILENAME_LEN];//+: enlarge filename len
 
     /**
      * Position of the first frame of the component, in
@@ -2936,6 +2936,10 @@ AVRational av_guess_frame_rate(AVFormatContext *ctx, AVStream *stream, AVFrame *
  */
 int avformat_match_stream_specifier(AVFormatContext *s, AVStream *st,
                                     const char *spec);
+#if 0
+int avformat_match_stream_specifier2(AVFormatContext *s, AVStream *st,
+                                    const char *spec);
+#endif
 
 int avformat_queue_attached_pictures(AVFormatContext *s);
 
