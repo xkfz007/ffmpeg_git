@@ -907,6 +907,7 @@ static void dump_attachment(AVStream *st, const char *filename)
     avio_close(out);
 }
 
+//+: o: options for input files
 static int open_input_file(OptionsContext *o, const char *filename)
 {
     InputFile *f;
@@ -966,6 +967,7 @@ static int open_input_file(OptionsContext *o, const char *filename)
                         o->frame_rates[o->nb_frame_rates - 1].u.str, 0);
         }
     }
+	//+: option -s
     if (o->nb_frame_sizes) {
         av_dict_set(&o->g->format_opts, "video_size", o->frame_sizes[o->nb_frame_sizes - 1].u.str, 0);
     }
@@ -1247,7 +1249,8 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
         av_log(NULL, AV_LOG_FATAL, "Could not alloc stream.\n");
         exit_program(1);
     }
-
+    //+: set pid from streamid_map
+    //+: but why nb_streams-1<nb_streamid_map
     if (oc->nb_streams - 1 < o->nb_streamid_map)
         st->id = o->streamid_map[oc->nb_streams - 1];
 
@@ -1846,6 +1849,7 @@ static OutputStream *new_subtitle_stream(OptionsContext *o, AVFormatContext *oc,
     return ost;
 }
 
+//+: store stream id (pid) to streamid_map
 /* arg format is "output-stream-index:streamid-value". */
 static int opt_streamid(void *optctx, const char *opt, const char *arg)
 {

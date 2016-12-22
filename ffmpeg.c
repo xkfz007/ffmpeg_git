@@ -3918,7 +3918,7 @@ static int get_input_packet(InputFile *f, AVPacket *pkt)
     }
 
 #if HAVE_PTHREADS
-    if (nb_input_files > 1)
+    if (nb_input_files > 1)//+: if there are multi inputfiles, threads will be used to read each file
         return get_input_packet_mt(f, pkt);
 #endif
     return av_read_frame(f->ctx, pkt);

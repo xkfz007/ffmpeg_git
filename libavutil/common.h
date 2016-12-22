@@ -338,7 +338,9 @@ static av_always_inline av_const int av_parity_c(uint32_t v)
 {
     return av_popcount(v) & 1;
 }
-
+//+: this convert 4 bytes to an integer
+//+: MKTAG:abcd=>0xdcba 
+//+: MKBETAG:abcd=>0xabcd
 #define MKTAG(a,b,c,d) ((a) | ((b) << 8) | ((c) << 16) | ((unsigned)(d) << 24))
 #define MKBETAG(a,b,c,d) ((d) | ((c) << 8) | ((b) << 16) | ((unsigned)(a) << 24))
 

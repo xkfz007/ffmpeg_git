@@ -91,6 +91,8 @@ typedef struct {
     int ofile_idx, ostream_idx;               // output
 } AudioChannelMap;
 
+//+: this struct mainly corresponds to the options in the help
+//+: noting to do with options of codecs or formats
 typedef struct OptionsContext {
     OptionGroup *g;
 
@@ -98,7 +100,7 @@ typedef struct OptionsContext {
     int64_t start_time;
     int64_t start_time_eof;
     int seek_timestamp;
-    const char *format;
+    const char *format;//+: -f
 
     SpecifierOpt *codec_names;
     int        nb_codec_names;
