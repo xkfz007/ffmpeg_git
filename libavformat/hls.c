@@ -703,6 +703,9 @@ static int parse_playlist(HLSContext *c, const char *url,
     }
     while (!avio_feof(in)) {
         read_chomp_line(in, line, sizeof(line));
+#if DEBUG_LOGS
+        av_log(c,AV_LOG_DEBUG,"hls demux:line=%s\n",line);
+#endif
         if (av_strstart(line, "#EXT-X-STREAM-INF:", &ptr)) {
             is_variant = 1;
             memset(&variant_info, 0, sizeof(variant_info));
@@ -733,6 +736,9 @@ static int parse_playlist(HLSContext *c, const char *url,
             if (ret < 0)
                 goto fail;
             pls->target_duration = strtoll(ptr, NULL, 10) * AV_TIME_BASE;
+#if DEBUG_LOGS
+            av_log(c,AV_LOG_DEBUG,"hls demux:pls->target_duration=%d\n",pls->target_duration);
+#endif
         } else if (av_strstart(line, "#EXT-X-MEDIA-SEQUENCE:", &ptr)) {
             ret = ensure_playlist(c, &pls, url);
             if (ret < 0)
@@ -760,6 +766,9 @@ static int parse_playlist(HLSContext *c, const char *url,
         } else if (av_strstart(line, "#EXTINF:", &ptr)) {
             is_segment = 1;
             duration   = atof(ptr) * AV_TIME_BASE;
+#if DEBUG_LOGS
+            av_log(c,AV_LOG_DEBUG,"hls demux:duration=%f\n",duration);
+#endif
         } else if (av_strstart(line, "#EXT-X-BYTERANGE:", &ptr)) {
             seg_size = strtoll(ptr, NULL, 10);
             ptr = strchr(ptr, '@');
@@ -812,6 +821,9 @@ static int parse_playlist(HLSContext *c, const char *url,
                 }
 
                 ff_make_absolute_url(tmp_str, sizeof(tmp_str), url, line);
+#if DEBUG_LOGS
+                av_log(c,AV_LOG_DEBUG,"hls demux:ts url=%s\n",tmp_str);
+#endif
                 seg->url = av_strdup(tmp_str);
                 if (!seg->url) {
                     av_free(seg->key);
@@ -1290,6 +1302,11 @@ reload:
             av_log(NULL, AV_LOG_WARNING,
                    "skipping %d segments ahead, expired from playlists\n",
                    v->start_seq_no - v->cur_seq_no);
+#if DEBUG_LOGS
+            av_log(NULL, AV_LOG_DEBUG,
+                   "v->start_seq_no=%d v->cur_seq_no=%d\n",
+                   v->start_seq_no , v->cur_seq_no);
+#endif
             v->cur_seq_no = v->start_seq_no;
         }
         if (v->cur_seq_no >= v->start_seq_no + v->n_segments) {

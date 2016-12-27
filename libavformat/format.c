@@ -187,6 +187,7 @@ AVInputFormat *av_probe_input_format3(AVProbeData *pd, int is_opened,
     if (!lpd.buf)
         lpd.buf = (unsigned char *) zerobuffer;
 
+    //+: check if there is id3v2 header
     if (lpd.buf_size > 10 && ff_id3v2_match(lpd.buf, ID3v2_DEFAULT_MAGIC)) {
         int id3len = ff_id3v2_tag_len(lpd.buf);
         if (lpd.buf_size > id3len + 16) {
@@ -200,6 +201,7 @@ AVInputFormat *av_probe_input_format3(AVProbeData *pd, int is_opened,
             nodat = ID3_GREATER_PROBE;
     }
 
+    //+: traverse the format list to find the format with max score
     fmt = NULL;
     while ((fmt1 = av_iformat_next(fmt1))) {
         if (!is_opened == !(fmt1->flags & AVFMT_NOFILE) && strcmp(fmt1->name, "image2"))
@@ -209,7 +211,8 @@ AVInputFormat *av_probe_input_format3(AVProbeData *pd, int is_opened,
             score = fmt1->read_probe(&lpd);
             if (score)
                 av_log(NULL, AV_LOG_TRACE, "Probing %s score:%d size:%d\n", fmt1->name, score, lpd.buf_size);
-            if (fmt1->extensions && av_match_ext(lpd.filename, fmt1->extensions)) {
+            //+: check file extension
+			if (fmt1->extensions && av_match_ext(lpd.filename, fmt1->extensions)) {
                 switch (nodat) {
                 case NO_ID3:
                     score = FFMAX(score, 1);
@@ -223,7 +226,7 @@ AVInputFormat *av_probe_input_format3(AVProbeData *pd, int is_opened,
                     break;
                 }
             }
-        } else if (fmt1->extensions) {
+        } else if (fmt1->extensions) {//+: just use extension
             if (av_match_ext(lpd.filename, fmt1->extensions))
                 score = AVPROBE_SCORE_EXTENSION;
         }
@@ -262,12 +265,17 @@ AVInputFormat *av_probe_input_format(AVProbeData *pd, int is_opened)
     int score = 0;
     return av_probe_input_format2(pd, is_opened, &score);
 }
-
+/*+:
+* Probe a bytestream to determine the input format. Each time a probe returns
+* with a score that is too low, the probe buffer size is increased and another
+* attempt is made. When the maximum probe size is reached, the input format
+* with the highest score is returned.
+*/
 int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
                           const char *filename, void *logctx,
                           unsigned int offset, unsigned int max_probe_size)
 {
-    AVProbeData pd = { filename ? filename : "" };
+    AVProbeData pd = { filename ? filename : "" };//+: filename will be converted to the first element of AVProbeData
     uint8_t *buf = NULL;
     int ret = 0, probe_size, buf_offset = 0;
     int score = 0;

@@ -4714,6 +4714,38 @@ static void ff_execute(int argc,char*argv[],int input_ind,int* otag_list,int out
 static int cmp(const void*a,const void*b){
 	return strcmp(*(char**)a,*(char**)b);
 }
+static int ff_mkdir_p(const char *path) {
+    int ret = 0;
+    char *temp = av_strdup(path);
+    char *pos = temp;
+    char tmp_ch = '\0';
+
+    if (!path || !temp) {
+        return -1;
+    }
+
+    if (!strncmp(temp, "/", 1) || !strncmp(temp, "\\", 1)) {
+        pos++;
+    } else if (!strncmp(temp, "./", 2) || !strncmp(temp, ".\\", 2)) {
+        pos += 2;
+    }
+
+    for ( ; *pos != '\0'; ++pos) {
+        if (*pos == '/' || *pos == '\\') {
+            tmp_ch = *pos;
+            *pos = '\0';
+            ret = mkdir(temp, 0755);
+            *pos = tmp_ch;
+        }
+    }
+
+    if ((*(pos - 1) != '/') || (*(pos - 1) != '\\')) {
+        ret = mkdir(temp, 0755);
+    }
+
+    av_free(temp);
+    return ret;
+}
 int main(int argc, char* argv[]){
 	int i;
 	const char *patterns=NULL;
@@ -4721,7 +4753,7 @@ int main(int argc, char* argv[]){
 	const char *output_tag[OUTPUT_NUM];
 	int otag_list[OUTPUT_NUM];
 	int input_ind=-1; //the index option '-i'
-	char outfilename[OUTPUT_NUM][256];
+	char outfilename[OUTPUT_NUM][OUTPUT_FILENAME_LEN];
 	char **input_filelist=NULL;
 	char* argv_internal[200];
 	int argc_internal=0;
@@ -4802,9 +4834,11 @@ int main(int argc, char* argv[]){
 		av_log(NULL,AV_LOG_INFO,"\t%2d:%s\n",i,input_filelist[i]);
 	}
 
-    for(i=0;i<inputfile_num;i++){
-    	size_t len,in_ext_len;
-    	char*infilename,*in_ext;
+	for(i=0;i<inputfile_num;i++){
+    	//size_t len, in_ext_len;
+    	char *base_name, *in_ext;
+        char *fn_copy;
+        char *dir_name;
     	int j;
 
 #if ENABLE_QUIT
@@ -4812,74 +4846,103 @@ int main(int argc, char* argv[]){
     		break;
 #endif
 
-    	infilename=input_filelist[i];
-    	//    	if(!is_livestream){
+        fn_copy = av_strdup(input_filelist[i]);
+        base_name = av_basename(fn_copy);
+        dir_name = av_dirname(fn_copy);
+
+    	av_log(NULL,AV_LOG_DEBUG,"dirname=%s basename=%s\n",dir_name,base_name);
+        
     	//check if it is a directory or a file
-    	if (lstat(infilename, &sb) == -1) {
-    		av_log(NULL,AV_LOG_ERROR,"Could not stat file/directory %s\n",infilename);
+    	if (lstat(input_filelist[i], &sb) == -1) {
+    		av_log(NULL,AV_LOG_ERROR,"Could not stat file/directory %s\n", input_filelist[i]);
     		exit(1);
     	}
     	if(S_ISDIR(sb.st_mode)){
-    		av_log(NULL,AV_LOG_WARNING,"%s is a directory, pass\n",infilename);
+    		av_log(NULL,AV_LOG_WARNING,"%s is a directory, pass\n", input_filelist[i]);
     		continue;
     	}
     	//    	}
 
-    	len=strlen(infilename);
-    	in_ext=strrchr(infilename,'.');
+    	//len=strlen(base_name);
+    	in_ext=strrchr(base_name,'.');
     	if(!in_ext) {
-    		av_log(NULL,AV_LOG_ERROR,"No extension in '%s'\n",infilename);
+    		av_log(NULL,AV_LOG_ERROR,"No extension in '%s'\n",base_name);
     		exit(1);
     	}
 
-    	in_ext_len=strlen(in_ext);
-    	av_log(NULL,AV_LOG_DEBUG,"len=%d in_ext=%s output_cnt=%d\n",len,in_ext,output_cnt);
-    	for(j=0;j<output_cnt;j++){
-    		char* outname=NULL;
-    		char* out_ext=NULL;
-    		int out_ext_len;
-    		memset(outfilename[j],0,256*sizeof(char));
-    		outname=outfilename[j];
-    		av_log(NULL,AV_LOG_DEBUG,"1:outname=%s out_ext=%s\n",outname,out_ext?out_ext:"NULL");
-    		if(!strncmp(output_tag[j],"udp:",4)||
-    				!strncmp(output_tag[j],"rtmp:",5)||
-					!strncmp(output_tag[j],"http:",5)||
-					!strncmp(output_tag[j],"rtsp:",5)){
-    			av_log(NULL,AV_LOG_INFO,"Output is live stream.\n");
-    			strcat(outname,output_tag[j]);
-    		}else{
-    			out_ext=strrchr(output_tag[j],'.');//a.ts, .ts, out,
-    			av_log(NULL,AV_LOG_DEBUG,"2:outname=%s out_ext=%s\n",outname,out_ext?out_ext:"NULL");
+    	//in_ext_len=strlen(in_ext);
+    	av_log(NULL,AV_LOG_DEBUG,"in_ext=%s output_cnt=%d\n",in_ext,output_cnt);
+        *in_ext='\0';
+        in_ext++;
+    	av_log(NULL,AV_LOG_DEBUG,"basename=%s in_ext=%s\n",base_name,in_ext);
+        for(j=0;j<output_cnt;j++){
+            char *p;
+            char* out_ext=NULL;
+            int out_ext_len;
+            p=outfilename[j];
+            memset(p,0,OUTPUT_FILENAME_LEN*sizeof(char));
+            av_log(NULL,AV_LOG_DEBUG,"1:outname=%s out_ext=%s\n",outfilename[j],out_ext?out_ext:"NULL");
+            if(av_stristart(output_tag[j],"udp:",NULL)||
+                av_stristart(output_tag[j],"rtmp:",NULL)||
+                av_stristart(output_tag[j],"http:",NULL)||
+                av_stristart(output_tag[j],"rtsp:",NULL)){
+                    av_log(NULL,AV_LOG_INFO,"Output is live stream.\n");
+                    p+=snprintf(p,OUTPUT_FILENAME_LEN,"%s",output_tag[j]);
+            }else{
+                char *fn_copy2=av_strdup(output_tag[j]);
+                char *base_name2,*dir_name2;
+                base_name2 = av_basename(fn_copy2);
+                dir_name2 = av_dirname(fn_copy2);
+                av_log(NULL,AV_LOG_DEBUG,"dirname2=%s basename2=%s\n",dir_name2,base_name2);
 
-    			if(out_ext&&out_ext!=output_tag[j]){//Not .ts
-    				strcat(outname,output_tag[j]);
-    				av_log(NULL,AV_LOG_DEBUG,"3-1:outname=%s out_ext=%s\n",outname,out_ext?out_ext:"NULL");
-    			}
-    			else{//out_ext==outpu_tag[j]: .ts
-    				// or out_ext==NULL
-    				strncpy(outname,infilename,len-in_ext_len);
-    				av_log(NULL,AV_LOG_DEBUG,"3-2:outname=%s out_ext=%s\n",outname,out_ext?out_ext:"NULL");
-    				if(!out_ext){//no extension, regard as tag
-    					strcat(outname,"_");
-    					strcat(outname,output_tag[j]);
-    					out_ext=in_ext;
-    				}
-    				strcat(outname,out_ext);//,out_ext_len);
-    				av_log(NULL,AV_LOG_DEBUG,"4:outname=%s out_ext=%s\n",outname,out_ext?out_ext:"NULL");
-    			}
-    			av_log(NULL,AV_LOG_DEBUG,"5:outname=%s out_ext=%s\n",outname,out_ext?out_ext:"NULL");
-    		}
-            if(!strcmp(infilename,outname)){
-                sprintf(outname+len-in_ext_len,"_out%s",out_ext);
-    			av_log(NULL,AV_LOG_ERROR,"Output filename is same with input filename, changed to '%s'\n",outname);
+                if (ff_mkdir_p(dir_name2) == -1 && errno != EEXIST) {
+                    av_log(NULL, AV_LOG_ERROR, "Could not create directory %s\n", dir_name2);
+                    av_free(fn_copy2);
+                    return -1;
+                }
+
+                out_ext=strrchr(base_name2,'.');//a.ts, .ts, out,
+                av_log(NULL,AV_LOG_DEBUG,"2-1:outname=%s out_ext=%s\n",outfilename[j],out_ext?out_ext:"NULL");
+
+                if(strcmp(dir_name2,"."))
+                    p+=sprintf(p,"%s/",dir_name2);
+                av_log(NULL,AV_LOG_DEBUG,"2-2:outname=%s out_ext=%s\n",outfilename[j],out_ext?out_ext:"NULL");
+                if(out_ext&&out_ext!=base_name2){//Not .ts
+                    p+=sprintf(p,"%s",base_name2);
+                    av_log(NULL,AV_LOG_DEBUG,"3-1:outname=%s out_ext=%s\n",outfilename[j],out_ext?out_ext:"NULL");
+                }
+                else{//out_ext==base_name2: .ts
+                    // or out_ext==NULL
+                    int ret;
+                    p+=sprintf(p,"%s",base_name);
+                    //av_log(NULL,AV_LOG_DEBUG,"ret=%d in_ext-base_name+1=%d\n",ret,in_ext-base_name+1);
+                    //p+=ret;
+                    av_log(NULL,AV_LOG_DEBUG,"3-2:outname=%s out_ext=%s\n",outfilename[j],out_ext?out_ext:"NULL");
+                    if(!out_ext){//no extension, regard as tag
+                        p+=sprintf(p,"_%s",base_name2);
+                        out_ext=in_ext;
+                    }
+                    if(!av_strstart(out_ext,".",NULL))
+                        p+=sprintf(p,".");
+                    p+=sprintf(p,"%s",out_ext);
+                    av_log(NULL,AV_LOG_DEBUG,"4:outname=%s out_ext=%s\n",outfilename[j],out_ext?out_ext:"NULL");
+                }
+                av_log(NULL,AV_LOG_DEBUG,"5:outname=%s out_ext=%s\n",outfilename[j],out_ext?out_ext:"NULL");
+                if(!strcmp(input_filelist[i],outfilename[j])){
+                    sprintf(outfilename[j],"%s/%s_out.%s",dir_name,base_name,in_ext);
+                    av_log(NULL,AV_LOG_WARNING,"Output filename is same with input filename, changed to '%s'\n",outfilename[j]);
+                }
+                av_free(fn_copy2);
             }
-    		argv_internal[otag_list[j]]=outname;
+    		argv_internal[otag_list[j]]=outfilename[j];
     	}
 
     	//set the input filename to the proper position
-    	argv_internal[input_ind]=infilename;
+    	argv_internal[input_ind]=input_filelist[i];
 
     	ff_execute(argc_internal,argv_internal,input_ind,otag_list,output_cnt,do_execute);
+
+        av_free(fn_copy);
     }
 
 fail:

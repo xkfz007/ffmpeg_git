@@ -2221,7 +2221,7 @@
 #define CONFIG_LIBRTMPTE_PROTOCOL 0
 #define CONFIG_LIBSSH_PROTOCOL 0
 #define CONFIG_LIBSMBCLIENT_PROTOCOL 0
-#include "./defines.h"
+#include "defines.h"
 
 #ifdef WIN32
 #define strtoll _strtoi64

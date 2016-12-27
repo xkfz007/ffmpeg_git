@@ -8,7 +8,7 @@
 #ifndef DEFINES_H_
 #define DEFINES_H_
 
-#define WRAP_FFMPEG 0
+#define WRAP_FFMPEG 1
 #define PRINT_PROCESSED 1
 #define ENABLE_QUIT 1
 #define FIX_PIXEL_FORMAT 1
@@ -16,6 +16,7 @@
 #define OUTPUT_FILENAME_LEN 2048
 
 #define MAP_SUPPORT_STREAMTYPE 1 // support like -map 0:p:1:v
+#define DEBUG_LOGS 1
 
 //#ifdef HAVE_ARC4RANDOM
 //#undef HAVE_ARC4RANDOM

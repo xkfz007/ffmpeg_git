@@ -974,6 +974,7 @@ static int open_input_file(OptionsContext *o, const char *filename)
     if (o->nb_frame_pix_fmts)
         av_dict_set(&o->g->format_opts, "pixel_format", o->frame_pix_fmts[o->nb_frame_pix_fmts - 1].u.str, 0);
 
+//+:here codec means decoder, because this is for input file
     MATCH_PER_TYPE_OPT(codec_names, str,    video_codec_name, ic, "v");
     MATCH_PER_TYPE_OPT(codec_names, str,    audio_codec_name, ic, "a");
     MATCH_PER_TYPE_OPT(codec_names, str, subtitle_codec_name, ic, "s");
@@ -997,9 +998,10 @@ static int open_input_file(OptionsContext *o, const char *filename)
     if (data_codec_name)
         av_format_set_data_codec(ic, find_codec_or_die(data_codec_name, AVMEDIA_TYPE_DATA, 0));
 
-    ic->flags |= AVFMT_FLAG_NONBLOCK;
+    ic->flags |= AVFMT_FLAG_NONBLOCK;//+: Do not block when reading packets from input
     ic->interrupt_callback = int_cb;
 
+    //+: just used for avformat_open_input, after that 'scan_all_pmts' is set to NULL
     if (!av_dict_get(o->g->format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE)) {
         av_dict_set(&o->g->format_opts, "scan_all_pmts", "1", AV_DICT_DONT_OVERWRITE);
         scan_all_pmts_set = 1;

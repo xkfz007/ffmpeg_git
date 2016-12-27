@@ -506,7 +506,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
     return 0;
 }
 
-
+//+: Open an input stream and read the header. The codecs are not opened.
+//+: The stream must be closed with avformat_close_input().
 int avformat_open_input(AVFormatContext **ps, const char *filename,
                         AVInputFormat *fmt, AVDictionary **options)
 {
@@ -533,6 +534,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     if ((ret = av_opt_set_dict(s, &tmp)) < 0)
         goto fail;
 
+    //+: probe format
     if ((ret = init_input(s, filename, &tmp)) < 0)
         goto fail;
     s->probe_score = ret;
