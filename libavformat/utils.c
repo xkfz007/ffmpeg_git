@@ -913,12 +913,15 @@ FF_ENABLE_DEPRECATION_WARNINGS
     switch (st->codecpar->codec_type) {
     case AVMEDIA_TYPE_VIDEO:
         if (st->r_frame_rate.num && !pc && s->iformat) {
+		//+: calculate duration from container frame rate
             *pnum = st->r_frame_rate.den;
             *pden = st->r_frame_rate.num;
         } else if (st->time_base.num * 1000LL > st->time_base.den) {
+        //+: if container time_base exceeds 1000, use it
             *pnum = st->time_base.num;
             *pden = st->time_base.den;
         } else if (codec_framerate.den * 1000LL > codec_framerate.num) {
+        //+: use codec time_base
             av_assert0(st->internal->avctx->ticks_per_frame);
             av_reduce(pnum, pden,
                       codec_framerate.den,
@@ -949,6 +952,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
         }
         if (frame_size <= 0 || sample_rate <= 0)
             break;
+		//+: for audio, duration can be calculated from frame_size and sample_rate
         *pnum = frame_size;
         *pden = sample_rate;
         break;
@@ -2640,7 +2644,7 @@ static void fill_all_stream_timings(AVFormatContext *ic)
         }
     }
 }
-
+//+: estimate duration according to bitrate and filesize
 static void estimate_timings_from_bit_rate(AVFormatContext *ic)
 {
     int64_t filesize, duration;
@@ -2659,7 +2663,7 @@ static void estimate_timings_from_bit_rate(AVFormatContext *ic)
                     bit_rate = 0;
                     break;
                 }
-                bit_rate += st->codecpar->bit_rate;
+                bit_rate += st->codecpar->bit_rate;//+: accumulate bitrate of all streams
             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && st->codec_info_nb_frames > 1) {
                 // If we have a videostream with packets but without a bitrate
                 // then consider the sum not known
@@ -2680,6 +2684,8 @@ static void estimate_timings_from_bit_rate(AVFormatContext *ic)
                 st      = ic->streams[i];
                 if (   st->time_base.num <= INT64_MAX / ic->bit_rate
                     && st->duration == AV_NOPTS_VALUE) {
+                    //+: duration_in_sec=8*filesize/bitrate
+                    //+: duration=duration_in_sec/time_base
                     duration = av_rescale(8 * filesize, st->time_base.den,
                                           ic->bit_rate *
                                           (int64_t) st->time_base.num);
@@ -2731,6 +2737,9 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
     filesize = ic->pb ? avio_size(ic->pb) : 0;
     do {
         is_end = found_duration;
+		//+: Try the nearest position of end first
+		//+: Because from the end pts get the most accurate duration
+		//+: the more retry times, the offset will be small
         offset = filesize - (DURATION_MAX_READ_SIZE << retry);
         if (offset < 0)
             offset = 0;
@@ -2738,11 +2747,12 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
         avio_seek(ic->pb, offset, SEEK_SET);
         read_size = 0;
         for (;;) {
+			//exit until the read_size exceeds MAX READ SIZE
             if (read_size >= DURATION_MAX_READ_SIZE << (FFMAX(retry - 1, 0)))
                 break;
 
             do {
-                ret = ff_read_packet(ic, pkt);
+                ret = ff_read_packet(ic, pkt);//+: get the last valid packet
             } while (ret == AVERROR(EAGAIN));
             if (ret != 0)
                 break;
@@ -2751,17 +2761,22 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
             if (pkt->pts != AV_NOPTS_VALUE &&
                 (st->start_time != AV_NOPTS_VALUE ||
                  st->first_dts  != AV_NOPTS_VALUE)) {
+                 //+: get duration of current packet
+                 //+: add pkt duration, we can get much more accurate duration
                 if (pkt->duration == 0) {
                     ff_compute_frame_duration(ic, &num, &den, st, st->parser, pkt);
                     if (den && num) {
+						//+: get duration of time_base
                         pkt->duration = av_rescale_rnd(1,
                                            num * (int64_t) st->time_base.den,
                                            den * (int64_t) st->time_base.num,
                                            AV_ROUND_DOWN);
                     }
                 }
+				//+:pts of last packet plus its duration to get the duration of total file
                 duration = pkt->pts + pkt->duration;
                 found_duration = 1;
+				//+: if start_time is not 0, minus it
                 if (st->start_time != AV_NOPTS_VALUE)
                     duration -= st->start_time;
                 else
@@ -4535,6 +4550,8 @@ void av_url_split(char *proto, int proto_size,
     }
 }
 
+//+: convert intergers to hex format
+//+: s is the total count of numbers in src
 char *ff_data_to_hex(char *buff, const uint8_t *src, int s, int lowercase)
 {
     int i;
@@ -4549,8 +4566,8 @@ char *ff_data_to_hex(char *buff, const uint8_t *src, int s, int lowercase)
     const char *hex_table = lowercase ? hex_table_lc : hex_table_uc;
 
     for (i = 0; i < s; i++) {
-        buff[i * 2]     = hex_table[src[i] >> 4];
-        buff[i * 2 + 1] = hex_table[src[i] & 0xF];
+        buff[i * 2]     = hex_table[src[i] >> 4];//+: devide 16 to get high hex digit
+        buff[i * 2 + 1] = hex_table[src[i] & 0xF];//+: residual to get low hex digit
     }
 
     return buff;
@@ -4574,7 +4591,7 @@ int ff_hex_to_data(uint8_t *data, const char *p)
         else
             break;
         v = (v << 4) | c;
-        if (v & 0x100) {
+        if (v & 0x100) {//+: if carry is found
             if (data)
                 data[len] = v;
             len++;
@@ -4633,7 +4650,7 @@ void ff_parse_key_value(const char *str, ff_parse_key_val_cb callback_get_buf,
 
         key = ptr;
 
-        if (!(ptr = strchr(key, '=')))
+        if (!(ptr = strchr(key, '=')))//+: find '=', if no '=', exit
             break;
         ptr++;
         key_len = ptr - key;
@@ -4641,7 +4658,7 @@ void ff_parse_key_value(const char *str, ff_parse_key_val_cb callback_get_buf,
         callback_get_buf(context, key, key_len, &dest, &dest_len);
         dest_end = dest + dest_len - 1;
 
-        if (*ptr == '\"') {
+        if (*ptr == '\"') {//+:The value strings may be quoted and may contain escaped characters within quoted strings.
             ptr++;
             while (*ptr && *ptr != '\"') {
                 if (*ptr == '\\') {
