@@ -3365,7 +3365,10 @@ void ff_rfps_calculate(AVFormatContext *ic)
         st->info->rfps_duration_sum = 0;
     }
 }
-
+//+: Read packets of a media file to get stream information. 
+//+: This is useful for file formats with no headers such as MPEG. 
+//+: The logical file position is not changed by this function;
+//+: examined packets may be buffered for later processing.
 int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 {
     int i, count = 0, ret = 0, j;
@@ -4418,7 +4421,8 @@ uint64_t ff_ntp_time(void)
 {
     return (av_gettime() / 1000) * 1000 + NTP_OFFSET_US;
 }
-
+//+: Return in 'buf' the path with '%d' replaced by a number.
+//+: Also handles the '%0nd' format where 'n' is the total number of digits and '%%'.
 int av_get_frame_filename2(char *buf, int buf_size, const char *path, int number, int flags)
 {
     const char *p;

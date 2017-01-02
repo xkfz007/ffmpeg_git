@@ -636,7 +636,7 @@ static int h264_parse(AVCodecParserContext *s,
     *poutbuf_size = buf_size;
     return next;
 }
-
+//+: split NALU
 static int h264_split(AVCodecContext *avctx,
                       const uint8_t *buf, int buf_size)
 {

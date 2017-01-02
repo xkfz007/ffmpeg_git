@@ -164,7 +164,7 @@ static av_cold void avcodec_init(void)
     if (CONFIG_ME_CMP)
         ff_me_cmp_init_static();
 }
-
+//+: check if the encode or decode function is available
 int av_codec_is_encoder(const AVCodec *codec)
 {
     return codec && (codec->encode_sub || codec->encode2 ||codec->send_frame);
@@ -3096,6 +3096,7 @@ static AVCodec *find_encdec(enum AVCodecID id, int encoder)
     while (p) {
         if ((encoder ? av_codec_is_encoder(p) : av_codec_is_decoder(p)) &&
             p->id == id) {
+            //+: record the experimental first, in case not found the best
             if (p->capabilities & AV_CODEC_CAP_EXPERIMENTAL && !experimental) {
                 experimental = p;
             } else

@@ -201,10 +201,10 @@ static AVDictionary *strip_specifiers(AVDictionary *dict)
         char *p = strchr(e->key, ':');
 
         if (p)
-            *p = 0;
+            *p = 0;//+: change ':' to '\0', so e->key has only option, no stream specifier
         av_dict_set(&ret, e->key, e->value, 0);
         if (p)
-            *p = ':';
+            *p = ':';//+: recover the stream specifier
     }
     return ret;
 }
@@ -635,7 +635,10 @@ static AVCodec *choose_decoder(OptionsContext *o, AVFormatContext *s, AVStream *
     char *codec_name = NULL;
 
     MATCH_PER_STREAM_OPT(codec_names, str, codec_name, s, st);
-    if (codec_name) {
+#if DEBUG_LOGS
+	av_log(NULL,AV_LOG_DEBUG,"codec_name=%s\n",codec_name);
+#endif
+	if (codec_name) {
         AVCodec *codec = find_codec_or_die(codec_name, st->codecpar->codec_type, 0);
         st->codecpar->codec_id = codec->id;
         return codec;
@@ -974,7 +977,7 @@ static int open_input_file(OptionsContext *o, const char *filename)
     if (o->nb_frame_pix_fmts)
         av_dict_set(&o->g->format_opts, "pixel_format", o->frame_pix_fmts[o->nb_frame_pix_fmts - 1].u.str, 0);
 
-//+:here codec means decoder, because this is for input file
+    //+:here codec means decoder, because this is for input file
     MATCH_PER_TYPE_OPT(codec_names, str,    video_codec_name, ic, "v");
     MATCH_PER_TYPE_OPT(codec_names, str,    audio_codec_name, ic, "a");
     MATCH_PER_TYPE_OPT(codec_names, str, subtitle_codec_name, ic, "s");
@@ -1016,7 +1019,8 @@ static int open_input_file(OptionsContext *o, const char *filename)
     }
     if (scan_all_pmts_set)
         av_dict_set(&o->g->format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE);
-    remove_avoptions(&o->g->format_opts, o->g->codec_opts);
+    //+: remove the same options in o->g->format_opts from o->g->codec_opts
+	remove_avoptions(&o->g->format_opts, o->g->codec_opts);
     assert_avoptions(o->g->format_opts);
 
     /* apply forced codec ids */

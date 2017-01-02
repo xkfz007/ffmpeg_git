@@ -2096,7 +2096,9 @@ int check_stream_specifier(AVFormatContext *s, AVStream *st, const char *spec)
         av_log(s, AV_LOG_ERROR, "Invalid stream specifier: %s.\n", spec);
     return ret;
 }
-
+//+: Filter out options for given codec.
+//+: Create a new options dictionary containing only the options from
+//+: opts which apply to the codec with ID codec_id.
 AVDictionary *filter_codec_opts(AVDictionary *opts, enum AVCodecID codec_id,
                                 AVFormatContext *s, AVStream *st, AVCodec *codec)
 {
@@ -2153,7 +2155,7 @@ AVDictionary *filter_codec_opts(AVDictionary *opts, enum AVCodecID codec_id,
     }
     return ret;
 }
-
+//+: split options for all streams from codec_opts
 AVDictionary **setup_find_stream_info_opts(AVFormatContext *s,
                                            AVDictionary *codec_opts)
 {
