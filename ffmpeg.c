@@ -1820,7 +1820,6 @@ static void flush_encoders(void)
         OutputStream   *ost = output_streams[i];
         AVCodecContext *enc = ost->enc_ctx;
         OutputFile      *of = output_files[ost->file_index];
-        int stop_encoding = 0;
 
         if (!ost->encoding_needed)
             continue;
@@ -1839,6 +1838,8 @@ static void flush_encoders(void)
 
         for (;;) {
             const char *desc = NULL;
+            AVPacket pkt;
+            int pkt_size;
 
             switch (enc->codec_type) {
             case AVMEDIA_TYPE_AUDIO:
@@ -1851,9 +1852,6 @@ static void flush_encoders(void)
                 av_assert0(0);
             }
 
-            if (1) {
-                AVPacket pkt;
-                int pkt_size;
                 av_init_packet(&pkt);
                 pkt.data = NULL;
                 pkt.size = 0;
@@ -1871,7 +1869,6 @@ static void flush_encoders(void)
                     fprintf(ost->logfile, "%s", enc->stats_out);
                 }
                 if (ret == AVERROR_EOF) {
-                    stop_encoding = 1;
                     break;
                 }
                 if (ost->finished & MUXER_FINISHED) {
@@ -1884,10 +1881,6 @@ static void flush_encoders(void)
                 if (ost->enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO && vstats_filename) {
                     do_video_stats(ost, pkt_size);
                 }
-            }
-
-            if (stop_encoding)
-                break;
         }
     }
 }

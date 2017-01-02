@@ -1201,13 +1201,15 @@ check_cpp_condition(){
 EOF
 }
 
-test_cflags_cpp(){
-    log test_cflags_cpp "$@"
+test_cflags_cc(){
+    log test_cflags_cc "$@"
     flags=$1
-    condition=$2
-    shift 2
+    header=$2
+    condition=$3
+    shift 3
     set -- $($cflags_filter "$flags")
-    check_cpp "$@" <<EOF
+    check_cc "$@" <<EOF
+#include <$header>
 #if !($condition)
 #error "unsatisfied condition: $condition"
 #endif
@@ -4625,7 +4627,7 @@ add_cxxflags -std=c++98
 
 # some compilers silently accept -std=c11, so we also need to check that the
 # version macro is defined properly
-if test_cflags_cpp -std=c11 "__STDC_VERSION__ >= 201112L"; then
+if test_cflags_cc -std=c11 ctype.h "__STDC_VERSION__ >= 201112L"; then
     add_cflags -std=c11
 else
     check_cflags -std=c99
@@ -5623,7 +5625,7 @@ check_header asm/types.h
 # it seems there are versions of clang in some distros that try to use the
 # gcc headers, which explodes for stdatomic
 # so we also check that atomics actually work here
-check_builtin stdatomic_h stdatomic.h "atomic_int foo; atomic_store(&foo, 0)"
+check_builtin stdatomic_h stdatomic.h "atomic_int foo, bar = ATOMIC_VAR_INIT(-1); atomic_store(&foo, 0)"
 
 check_lib2 "windows.h shellapi.h" CommandLineToArgvW -lshell32
 check_lib2 "windows.h wincrypt.h" CryptGenRandom -ladvapi32

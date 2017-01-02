@@ -194,7 +194,7 @@ static int hls_delete_old_segments(HLSContext *hls) {
         }
     }
 
-    if (segment) {
+    if (segment && !hls->use_localtime_mkdir) {
         if (hls->segment_filename) {
             dirname = av_strdup(hls->segment_filename);
         } else {
@@ -211,15 +211,20 @@ static int hls_delete_old_segments(HLSContext *hls) {
     while (segment) {
         av_log(hls, AV_LOG_DEBUG, "deleting old segment %s\n",
                                   segment->filename);
-        path_size = strlen(dirname) + strlen(segment->filename) + 1;
+        path_size =  (hls->use_localtime_mkdir ? 0 : strlen(dirname)) + strlen(segment->filename) + 1;
         path = av_malloc(path_size);
         if (!path) {
             ret = AVERROR(ENOMEM);
             goto fail;
         }
 
-        av_strlcpy(path, dirname, path_size);
-        av_strlcat(path, segment->filename, path_size);
+        if (hls->use_localtime_mkdir)
+            av_strlcpy(path, segment->filename, path_size);
+        else { // segment->filename contains basename only
+            av_strlcpy(path, dirname, path_size);
+            av_strlcat(path, segment->filename, path_size);
+        }
+
         if (unlink(path) < 0) {
             av_log(hls, AV_LOG_ERROR, "failed to delete old segment %s: %s\n",
                                      path, strerror(errno));
@@ -362,6 +367,16 @@ static int hls_mux_init(AVFormatContext *s)
     return 0;
 }
 
+static HLSSegment *find_segment_by_filename(HLSSegment *segment, const char *filename)
+{
+    while (segment) {
+        if (!av_strcasecmp(segment->filename,filename))
+            return segment;
+        segment = segment->next;
+    }
+    return (HLSSegment *) NULL;
+}
+
 /* Create a new segment and append it to the segment list */
 static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls, double duration,
                               int64_t pos, int64_t size)
@@ -377,6 +392,10 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls, double
 
     if (hls->use_localtime_mkdir) {
         filename = hls->avf->filename;
+    }
+    if (find_segment_by_filename(hls->segments, filename)
+        || find_segment_by_filename(hls->old_segments, en->filename)) {
+        av_log(hls, AV_LOG_WARNING, "Duplicated segment filename detected: %s\n", filename);
     }
     av_strlcpy(en->filename, filename, sizeof(en->filename));
 
@@ -654,38 +673,6 @@ fail:
     return ret;
 }
 
-static HLSSegment *find_segment_by_filename(HLSSegment *segment, const char *filename)
-{
-    /* filename may contain rel/abs path, but segments store only basename */
-    char *p = NULL, *dirname = NULL, *path = NULL;
-    int path_size;
-    HLSSegment *ret_segment = NULL;
-    dirname = av_strdup(filename);
-    if (!dirname)
-        return NULL;
-    p = (char *)av_basename(dirname); // av_dirname would return . in case of no dir
-    *p = '\0'; // maybe empty
-
-    while (segment) {
-        path_size = strlen(dirname) + strlen(segment->filename) + 1;
-        path = av_malloc(path_size);
-        if (!path)
-            goto end;
-        av_strlcpy(path, dirname, path_size);
-        av_strlcat(path, segment->filename, path_size);
-        if (!strcmp(path,filename)) {
-            ret_segment = segment;
-            av_free(path);
-            goto end;
-        }
-        av_free(path);
-        segment = segment->next;
-    }
-end:
-    av_free(dirname);
-    return ret_segment;
-}
-
 static int hls_start(AVFormatContext *s)
 {
     HLSContext *c = s->priv_data;
@@ -730,10 +717,6 @@ static int hls_start(AVFormatContext *s)
                     return AVERROR(EINVAL);
                 }
                 av_free(filename);
-            }
-            if (find_segment_by_filename(c->segments, oc->filename)
-                || find_segment_by_filename(c->old_segments, oc->filename)) {
-                av_log(c, AV_LOG_WARNING, "Duplicated segment filename detected: %s\n", oc->filename);
             }
             if (c->use_localtime_mkdir) {
                 const char *dir;
@@ -824,13 +807,23 @@ fail:
     return err;
 }
 
+static const char * get_default_pattern_localtime_fmt(void)
+{
+    char b[21];
+    time_t t = time(NULL);
+    struct tm *p, tmbuf;
+    p = localtime_r(&t, &tmbuf);
+    // no %s support when strftime returned error or left format string unchanged
+    return (!strftime(b, sizeof(b), "%s", p) || !strcmp(b, "%s")) ? "-%Y%m%d%H%I%S.ts" : "-%s.ts";
+}
+
 static int hls_write_header(AVFormatContext *s)
 {
     HLSContext *hls = s->priv_data;
     int ret, i;
     char *p;
     const char *pattern = "%d.ts";
-    const char *pattern_localtime_fmt = "-%s.ts";
+    const char *pattern_localtime_fmt = get_default_pattern_localtime_fmt();
     const char *vtt_pattern = "%d.vtt";
     AVDictionary *options = NULL;
     int basename_size;
