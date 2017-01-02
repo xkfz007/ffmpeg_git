@@ -1,0 +1,211 @@
+To begin with set the compiler
+
+$ export CC=clang
+
+
+Then create a 1GB Ramdisk
+
+$ DISK_ID=$(hdid -nomount ram://2621440)
+$ newfs_hfs -v Ramdisk ${DISK_ID}
+$ diskutil mount ${DISK_ID}
+
+
+Set up some shortcuts (MES is where all the archives are stored)
+
+$ MES=/Packages/
+$ TARGET="/Volumes/Ramdisk/sw"
+$ CMPL="/Volumes/Ramdisk/compile"
+
+
+
+Setup target directories
+
+$ mkdir ${TARGET}
+$ mkdir ${CMPL}
+
+
+
+Add the target bin/ directory to the $PATH
+
+$ export PATH=${TARGET}/bin:$PATH
+
+
+
+Build yasm
+
+$ cd ${CMPL}
+$ tar xzpf ${MES}/yasm-1.3.0.tar.gz
+$ cd yasm-1.3.0
+$ ./configure --prefix=${TARGET} && make -j 4 && make install
+
+
+
+Build OpenCore amr
+
+$ cd ${CMPL}
+$ tar xzpf ${MES}/opencore-amr-0.1.3.tar.gz
+$ cd opencore-amr-0.1.3
+$ ./configure --prefix=${TARGET} --disable-shared --enable-static && make -j 4 && make install
+
+
+(ORC was here but I removed it 9/26/12)
+
+
+Build libvpx
+
+$ cd ${CMPL}
+$ tar xjpf ${MES}/libvpx-v1.6.tar.bz2
+$ cd libvpx-v1.6
+$ ./configure --prefix=${TARGET} --disable-unit-tests --disable-shared && make -j 4 && make install
+
+
+
+Build lame
+
+$ cd ${CMPL}
+$ tar xzpf ${MES}/lame-3.99.5tar.gz
+$ cd lame-3.99.5
+$ ./configure --prefix=${TARGET} --disable-shared --enable-static && make -j 4 && make install
+
+
+Build xvidcore and remove the dynamic library
+
+$ cd ${CMPL}
+$ tar xzpf ${MES}/xvidcore-1.3.4.tar.gz
+$ cd xvidcore
+$ cd build/generic
+$ ./configure --prefix=${TARGET} --disable-shared --enable-static && make -j 4 && make install
+$ rm ${TARGET}/lib/libxvidcore.4.dylib
+
+
+
+Build x264
+
+$ cd ${CMPL}
+$ tar xjpf ${MES}/x264-snapshot-*
+$ cd x264-snapshot-*
+$ ./configure --prefix=${TARGET} --disable-shared --enable-static && make -j 4 && make install && make install-lib-static
+
+
+
+Build ogg
+
+$ cd ${CMPL}
+$ tar xzpf ${MES}/libogg-1.3.2.tar.gz
+$ cd libogg-1.3.2
+$ ./configure --prefix=${TARGET} --disable-shared --enable-static && make -j 4 && make install
+
+
+
+Build vorbis
+
+$ cd ${CMPL}
+$ tar xzpf ${MES}/libvorbis-1.3.5.tar.gz
+$ cd libvorbis-1.3.5
+$ ./configure --prefix=${TARGET} --with-ogg-libraries=${TARGET}/lib --with-ogg-includes=/Volumes/Ramdisk/sw/include/ --enable-static --disable-shared && make -j 4 && make install
+
+
+
+Build Theora
+
+$ cd ${CMPL}
+$ tar xjpf ${MES}/libtheora-1.1.1.tar.bz2
+$ cd libtheora-1.1.1
+$ ./configure --prefix=${TARGET} --with-ogg-libraries=${TARGET}/lib --with-ogg-includes=${TARGET}/include/ --with-vorbis-libraries=${TARGET}/lib --with-vorbis-includes=${TARGET}/include/ --enable-static --disable-shared && make -j 4 && make install
+
+
+Build Speex
+
+$ cd ${CMPL}
+$ tar xzpf ${MES}/speex-1.2rc1.tar.gz
+$ cd speex-1.2rc1
+$ ./configure --prefix=${TARGET} --disable-shared --enable-static && make -j 4 && make install
+
+
+
+Build GSM
+
+$ cd ${CMPL}
+$ tar xzpf ${MES}/libgsm_1.0.13.orig.tar.gz
+$ cd gsm-1.0-pl13
+$ mkdir -p ${TARGET}/man/man3
+$ mkdir -p ${TARGET}/man/man1
+$ mkdir -p ${TARGET}/include/gsm
+$ perl -p -i -e "s#^INSTALL_ROOT.*#INSTALL_ROOT = $TARGET#g" Makefile
+$ perl -p -i -e "s#_ROOT\)/inc#_ROOT\)/include#g" Makefile
+$ sed "/GSM_INSTALL_INC/s/include/include\/gsm/g" Makefile > Makefile.new
+$ mv Makefile.new Makefile
+$ make -j 2 && make install
+
+
+
+Build pkg-config
+
+
+$ cd ${CMPL}
+$ tar xzpf ${MES}/pkg-config-0.29.1.tar.gz
+$ cd pkg-config-0.29.1
+$ ./configure --silent --prefix=${TARGET} --with-pc-path=${TARGET}/lib/pkgconfig --with-internal-glib
+$ make
+$ make install
+
+
+
+Build Cmake
+
+
+$ cd ${CMPL}
+$ tar xzpf ${MES}/cmake-3.6.2.tar.gz
+$ cd cmake-3.6.2
+$ rm Modules/FindJava.cmake
+$ perl -p -i -e "s/get_filename_component.JNIPATH/#get_filename_component(JNIPATH/g" Tests/CMakeLists.txt
+$ ./configure --prefix=${TARGET}
+$ make
+$ make install
+
+
+
+Build VidStab
+
+
+$ cd ${CMPL}
+$ tar xzpf ${MES}/georgmartius-vid.stab-release-0.98b-0-g3b35b4d.tar.gz
+$ cd georgmartius-vid.stab*
+$ perl -p -i -e 's/vidstab SHARED/vidstab STATIC/' CMakeLists.txt
+$ cmake -DCMAKE_INSTALL_PREFIX:PATH=${TARGET} . && $MKMU && make -s install
+
+
+
+x265
+
+
+cd ${CMPL}
+hg clone https://bitbucket.org/multicoreware/x265
+cd x265
+cd source
+cmake -DCMAKE_INSTALL_PREFIX:PATH=${TARGET} -DENABLE_SHARED=NO .
+make -j 2 && make install
+
+
+
+compiler environment for ffmpeg
+
+
+unset LDFLAGS CFLAGS MYFLAGS
+export MYFLAGS="-L${TARGET}/lib -I${TARGET}/include -lstdc++"
+export LDFLAGS="$MYFLAGS"
+export CFLAGS="$MYFLAGS"
+
+
+
+Compiling FFmpeg
+
+
+$ cd ${CMPL}
+$ tar xjpf ${MES}/ffmpeg-*
+$ cd ffmpeg*
+$./configure --prefix=${TARGET} --enable-gpl --enable-pthreads --enable-version3 --enable-libspeex --enable-libvpx --disable-decoder=libvpx --enable-libmp3lame --enable-libtheora --enable-libvorbis --enable-libx264 --enable-avfilter --enable-libopencore_amrwb --enable-libopencore_amrnb --enable-filters --enable-libgsm --enable-libvidstab --enable-libx265 --arch=x86_64 --enable-runtime-cpudetect && make -j 4 && make install
+
+
+
+A working ffmpeg binary is available in the ${TARGET}/bin folder
