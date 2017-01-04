@@ -2093,7 +2093,7 @@ static int open_output_file(OptionsContext *o, const char *filename)
     of->shortest       = o->shortest;
     av_dict_copy(&of->opts, o->g->format_opts, 0);
 
-    if (!strcmp(filename, "-"))
+    if (!strcmp(filename, "-"))//+: outpout is stdout
         filename = "pipe:";
 
     err = avformat_alloc_output_context2(&oc, NULL, o->format, filename);
@@ -2191,7 +2191,7 @@ static int open_output_file(OptionsContext *o, const char *filename)
                     new_area > area) {
                     if((qcr==MKTAG('A', 'P', 'I', 'C')) && !(ist->st->disposition & AV_DISPOSITION_ATTACHED_PIC))
                         continue;
-                    area = new_area;
+                    area = new_area;//+: pick the one with best area
                     idx = i;
                 }
             }
@@ -2208,7 +2208,7 @@ static int open_output_file(OptionsContext *o, const char *filename)
                 score = ist->st->codecpar->channels + 100000000*!!ist->st->codec_info_nb_frames;
                 if (ist->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
                     score > best_score) {
-                    best_score = score;
+                    best_score = score;//+: the one with most channel
                     idx = i;
                 }
             }

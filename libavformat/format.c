@@ -114,10 +114,12 @@ AVOutputFormat *av_guess_format(const char *short_name, const char *filename,
     score_max = 0;
     while ((fmt = av_oformat_next(fmt))) {
         score = 0;
+		//+: check format name
         if (fmt->name && short_name && av_match_name(short_name, fmt->name))
             score += 100;
         if (fmt->mime_type && mime_type && !strcmp(fmt->mime_type, mime_type))
             score += 10;
+		//+: check extension
         if (filename && fmt->extensions &&
             av_match_ext(filename, fmt->extensions)) {
             score += 5;

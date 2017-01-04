@@ -155,8 +155,9 @@ int avformat_alloc_output_context2(AVFormatContext **avctx, AVOutputFormat *ofor
     if (!s)
         goto nomem;
 
+    //+: if format is not given, guess format
     if (!oformat) {
-        if (format) {
+        if (format) {//+: this format is read from option "-f"
             oformat = av_guess_format(format, NULL, NULL);
             if (!oformat) {
                 av_log(s, AV_LOG_ERROR, "Requested output format '%s' is not a suitable output format\n", format);
