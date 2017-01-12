@@ -174,10 +174,7 @@ OBJS-$(CONFIG_AMRWB_DECODER)           += amrwbdec.o celp_filters.o   \
                                           celp_math.o acelp_filters.o \
                                           acelp_vectors.o             \
                                           acelp_pitch_delay.o
-OBJS-$(CONFIG_AMV_ENCODER)             += mjpegenc.o mjpegenc_common.o \
-                                          mpegvideo_enc.o motion_est.o \
-                                          ratecontrol.o mpeg12data.o   \
-                                          mpegvideo.o
+OBJS-$(CONFIG_AMV_ENCODER)             += mjpegenc.o mjpegenc_common.o
 OBJS-$(CONFIG_ANM_DECODER)             += anm.o
 OBJS-$(CONFIG_ANSI_DECODER)            += ansi.o cga_data.o
 OBJS-$(CONFIG_APE_DECODER)             += apedec.o
@@ -469,6 +466,7 @@ OBJS-$(CONFIG_QCELP_DECODER)           += qcelpdec.o                     \
                                           celp_filters.o acelp_vectors.o \
                                           acelp_filters.o
 OBJS-$(CONFIG_QDM2_DECODER)            += qdm2.o
+OBJS-$(CONFIG_QDMC_DECODER)            += qdmc.o
 OBJS-$(CONFIG_QDRAW_DECODER)           += qdrw.o
 OBJS-$(CONFIG_QPEG_DECODER)            += qpeg.o
 OBJS-$(CONFIG_QTRLE_DECODER)           += qtrle.o
@@ -523,6 +521,7 @@ OBJS-$(CONFIG_SOL_DPCM_DECODER)        += dpcm.o
 OBJS-$(CONFIG_SONIC_DECODER)           += sonic.o
 OBJS-$(CONFIG_SONIC_ENCODER)           += sonic.o
 OBJS-$(CONFIG_SONIC_LS_ENCODER)        += sonic.o
+OBJS-$(CONFIG_SPEEDHQ_DECODER)         += speedhq.o simple_idct.o
 OBJS-$(CONFIG_SP5X_DECODER)            += sp5xdec.o
 OBJS-$(CONFIG_SRT_DECODER)             += srtdec.o ass.o htmlsubtitles.o
 OBJS-$(CONFIG_SRT_ENCODER)             += srtenc.o ass_split.o

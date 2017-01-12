@@ -388,6 +388,11 @@ static av_cold int wmavoice_decode_init(AVCodecContext *ctx)
                ctx->extradata_size);
         return AVERROR_INVALIDDATA;
     }
+    if (ctx->block_align <= 0) {
+        av_log(ctx, AV_LOG_ERROR, "Invalid block alignment %d.\n", ctx->block_align);
+        return AVERROR_INVALIDDATA;
+    }
+
     flags                = AV_RL32(ctx->extradata + 18);
     s->spillover_bitsize = 3 + av_ceil_log2(ctx->block_align);
     s->do_apf            =    flags & 0x1;
@@ -1923,6 +1928,9 @@ static int wmavoice_decode_packet(AVCodecContext *ctx, void *data,
          * continuing to parse new superframes in the current packet. */
         if (s->sframe_cache_size > 0) {
             int cnt = get_bits_count(gb);
+            if (cnt + s->spillover_nbits > avpkt->size * 8) {
+                s->spillover_nbits = avpkt->size * 8 - cnt;
+            }
             copy_bits(&s->pb, avpkt->data, size, gb, s->spillover_nbits);
             flush_put_bits(&s->pb);
             s->sframe_cache_size += s->spillover_nbits;

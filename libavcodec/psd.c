@@ -60,6 +60,8 @@ typedef struct PSDContext {
 
     enum PsdCompr compression;
     enum PsdColorMode color_mode;
+
+    uint8_t palette[AVPALETTE_SIZE];
 } PSDContext;
 
 static int decode_header(PSDContext * s)
@@ -158,6 +160,14 @@ static int decode_header(PSDContext * s)
     if (bytestream2_get_bytes_left(&s->gb) < (len_section + 4)) { /* section and len next section */
         av_log(s->avctx, AV_LOG_ERROR, "Incomplete file.\n");
         return AVERROR_INVALIDDATA;
+    }
+    if (len_section) {
+        int i,j;
+        memset(s->palette, 0xff, AVPALETTE_SIZE);
+        for (j = HAVE_BIGENDIAN; j < 3 + HAVE_BIGENDIAN; j++)
+            for (i = 0; i < FFMIN(256, len_section / 3); i++)
+                s->palette[i * 4 + (HAVE_BIGENDIAN ? j : 2 - j)] = bytestream2_get_byteu(&s->gb);
+        len_section -= i * 3;
     }
     bytestream2_skip(&s->gb, len_section);
 
@@ -306,9 +316,21 @@ static int decode_frame(AVCodecContext *avctx, void *data,
 
     s->pixel_size = s->channel_depth >> 3;/* in byte */
     s->line_size = s->width * s->pixel_size;
-    s->uncompressed_size = s->line_size * s->height * s->channel_count;
 
     switch (s->color_mode) {
+    case PSD_BITMAP:
+        s->line_size = s->width + 7 >> 3;
+        avctx->pix_fmt = AV_PIX_FMT_MONOWHITE;
+        break;
+    case PSD_INDEXED:
+        if (s->channel_depth != 8 || s->channel_count != 1) {
+            av_log(s->avctx, AV_LOG_ERROR,
+                   "Invalid indexed file (channel_depth %d, channel_count %d)\n",
+                   s->channel_depth, s->channel_count);
+            return AVERROR_INVALIDDATA;
+        }
+        avctx->pix_fmt = AV_PIX_FMT_PAL8;
+        break;
     case PSD_RGB:
         if (s->channel_count == 3) {
             if (s->channel_depth == 8) {
@@ -333,6 +355,8 @@ static int decode_frame(AVCodecContext *avctx, void *data,
             return AVERROR_PATCHWELCOME;
         }
         break;
+    case PSD_DUOTONE:
+        av_log(avctx, AV_LOG_WARNING, "ignoring unknown duotone specification.\n");
     case PSD_GRAYSCALE:
         if (s->channel_count == 1) {
             if (s->channel_depth == 8) {
@@ -361,6 +385,8 @@ static int decode_frame(AVCodecContext *avctx, void *data,
         avpriv_report_missing_feature(avctx, "color mode %d", s->color_mode);
         return AVERROR_PATCHWELCOME;
     }
+
+    s->uncompressed_size = s->line_size * s->height * s->channel_count;
 
     if ((ret = ff_get_buffer(avctx, picture, 0)) < 0)
         return ret;
@@ -409,11 +435,16 @@ static int decode_frame(AVCodecContext *avctx, void *data,
             plane_number = eq_channel[c];
             ptr = picture->data[plane_number];/* get the right plane */
             for (y = 0; y < s->height; y++) {
-                memcpy(ptr, ptr_data, s->width * s->pixel_size);
+                memcpy(ptr, ptr_data, s->line_size);
                 ptr += picture->linesize[plane_number];
-                ptr_data += s->width * s->pixel_size;
+                ptr_data += s->line_size;
             }
         }
+    }
+
+    if (s->color_mode == PSD_INDEXED) {
+        picture->palette_has_changed = 1;
+        memcpy(picture->data[1], s->palette, AVPALETTE_SIZE);
     }
 
     av_freep(&s->tmp);
