@@ -1,0 +1,222 @@
+ffmepg formats
+
+3g2             3g2         3GP2 (3GPP2 file format)
+3gp             3gp         3GP (3GPP file format)
+a64             a64         a64 - video for Commodore 64
+ac3             ac3         raw AC-3
+adts                     ADTS AAC (Advanced Audio Coding)
+adx             adx         CRI ADX
+aiff                     Audio IFF
+alaw                     PCM A-law
+amr                      3GPP AMR
+asf                      ASF (Advanced / Active Streaming Format)
+asf_stream               ASF (Advanced / Active Streaming Format)
+ass                      SSA (SubStation Alpha) subtitle
+ast                      AST (Audio Stream)
+au                       Sun AU
+avi                      AVI (Audio Video Interleaved)
+avm2                     SWF (ShockWave Flash) (AVM2)
+bit                      G.729 BIT file format
+caca                     caca (color ASCII art) output device
+caf                      Apple CAF (Core Audio Format)
+cavsvideo      cavs          raw Chinese AVS (Audio Video Standard) video
+crc                      CRC testing
+dash                     DASH Muxer
+data                     raw data
+daud                     D-Cinema audio
+decklink                 Blackmagic DeckLink output
+dirac          drc          raw Dirac
+dnxhd          dnxhd          raw DNxHD (SMPTE VC-3)
+dts            dts          raw DTS
+dv                       DV (Digital Video)
+dvd            dvd          MPEG-2 PS (DVD VOB)
+eac3           eac3          raw E-AC-3
+f32be                    PCM 32-bit floating-point big-endian
+f32le                    PCM 32-bit floating-point little-endian
+f4v             f4v         F4V Adobe Flash Video
+f64be                    PCM 64-bit floating-point big-endian
+f64le                    PCM 64-bit floating-point little-endian
+ffm                      FFM (FFserver live feed)
+ffmetadata               FFmpeg metadata in text
+filmstrip                Adobe Filmstrip
+flac                     raw FLAC
+flv                      FLV (Flash Video)
+framecrc                 framecrc testing
+framemd5                 Per-frame MD5 testing
+g722          g722           raw G.722
+g723_1        tco,rco           raw G.723.1
+gif                      GIF Animation
+gxf                      GXF (General eXchange Format)
+h261          h261           raw H.261
+h263          h263           raw H.263
+h264          h264,264           raw H.264 video
+hds                      HDS Muxer
+hevc          hevc           raw HEVC video
+hls                      Apple HTTP Live Streaming
+ico                      Microsoft Windows ICO
+ilbc                     iLBC storage
+image2                   image2 sequence
+image2pipe               piped image2 sequence
+ipod            m4v,m4a         iPod H.264 MP4 (MPEG-4 Part 14)
+ircam                    Berkeley/IRCAM/CARL Sound Format
+ismv            ismv,isma         ISMV/ISMA (Smooth Streaming)
+ivf                      On2 IVF
+jacosub                  JACOsub subtitle format
+latm                     LOAS/LATM
+lrc                      LRC lyrics
+m4v             m4v         raw MPEG-4 video
+matroska                 Matroska
+md5                      MD5 testing
+microdvd                 MicroDVD subtitle format
+mjpeg           mjpg,mjpeg         raw MJPEG video
+mkvtimestamp_v2          extract pts as timecode v2 format, as defined by mkvtoolnix
+mlp             mlp         raw MLP
+mmf                      Yamaha SMAF
+mov              mov        QuickTime / MOV
+mp2                      MP2 (MPEG audio layer 2)
+mp3                      MP3 (MPEG audio layer 3)
+mp4              mp4        MP4 (MPEG-4 Part 14)
+mpeg            mpg,mpeg         MPEG-1 Systems / MPEG program stream
+mpeg1video      mpg,mpeg,m1v         raw MPEG-1 video
+mpeg2video      m2v         raw MPEG-2 video
+mpegts                   MPEG-TS (MPEG-2 Transport Stream)
+mpjpeg                   MIME multipart JPEG
+mulaw                    PCM mu-law
+mxf                      MXF (Material eXchange Format)
+mxf_d10                  MXF (Material eXchange Format) D-10 Mapping
+null                     raw null video
+nut                      NUT
+oga                      Ogg Audio
+ogg                      Ogg
+oma                      Sony OpenMG audio
+opus                     Ogg Opus
+psp              mp4,psp        PSP MP4 (MPEG-4 Part 14)
+rawvideo         yuv,rgb        raw video
+rm                       RealMedia
+roq                      raw id RoQ
+rso                      Lego Mindstorms RSO
+rtp                      RTP output
+rtsp                     RTSP output
+s16be                    PCM signed 16-bit big-endian
+s16le                    PCM signed 16-bit little-endian
+s24be                    PCM signed 24-bit big-endian
+s24le                    PCM signed 24-bit little-endian
+s32be                    PCM signed 32-bit big-endian
+s32le                    PCM signed 32-bit little-endian
+s8                       PCM signed 8-bit
+sap                      SAP output
+sdl                      SDL output device
+segment                  segment
+smjpeg                   Loki SDL MJPEG
+smoothstreaming          Smooth Streaming Muxer
+sox                      SoX native
+spdif                    IEC 61937 (used on S/PDIF - IEC958)
+spx                      Ogg Speex
+srt                      SubRip subtitle
+stream_segment,s         segment streaming segment muxer
+svcd             vob        MPEG-2 PS (SVCD)
+swf                      SWF (ShockWave Flash)
+tee                      Multiple muxer tee
+truehd           thd        raw TrueHD
+u16be                    PCM unsigned 16-bit big-endian
+u16le                    PCM unsigned 16-bit little-endian
+u24be                    PCM unsigned 24-bit big-endian
+u24le                    PCM unsigned 24-bit little-endian
+u32be                    PCM unsigned 32-bit big-endian
+u32le                    PCM unsigned 32-bit little-endian
+u8                       PCM unsigned 8-bit
+uncodedframecrc          uncoded framecrc testing
+vc1             vc1         raw VC-1 video
+vc1test         rcv         VC-1 test bitstream
+vcd                      MPEG-1 Systems / MPEG program stream (VCD)
+vob             vob         MPEG-2 PS (VOB)
+voc                      Creative Voice
+w64                      Sony Wave64
+wav                      WAV / WAVE (Waveform Audio)
+webm                     WebM
+webm_dash_manife         st WebM DASH Manifest
+webp                     WebP
+webvtt                   WebVTT subtitle
+wtv                      Windows Television (WTV)
+wv                       raw WavPack
+yuv4mpegpipe             YUV4MPEG pipe
+
+
+
+'asf',           'asf,wmv,wma',              'ASF (Advanced / Active Streaming Format)'
+'avi',           'avi',                      'AVI (Audio Video Interleaved)'
+'adts',          'aac',                      'ADTS AAC (Advanced Audio Coding)'
+'f4v',           'f4v',                      'F4V Adobe Flash Video'
+'flac',          'flac',                     'raw FLAC'
+'flv',           'flv',                      'FLV (Flash Video)'
+'gif',           'gif',                      'GIF Animation'
+'h261',          'h261',                     'raw H.261'
+'h263',          'h263',                     'raw H.263'
+'h264',          'h264,264,avc',             'raw H.264 video'
+'hevc',          'hevc,265,h265',            'raw HEVC video'
+'image2',        'bmp,jpeg,jpg,png,tiff',    'image2 sequence'
+'ipod',          'm4v,m4a',                  'iPod H.264 MP4 (MPEG-4 Part 14)'
+'m4v',           'm4v',                      'raw MPEG-4 video'
+'matroska',      'mkv,mka',                  'Matroska'
+'mjpeg',         'mjpg,mjpeg',               'raw MJPEG video'
+'mmf',           'mmf',                      'Yamaha SMAF'
+'mov',           'mov',                      'QuickTime / MOV'
+'mp2',           'mp2,mpa,m2a',              'MP2 (MPEG audio layer 2)'
+'mp3',           'mp3',                      'MP3 (MPEG audio layer 3)'
+'mp4',           'mp4',                      'MP4 (MPEG-4 Part 14)'
+'mpeg',          'mpg,mpeg',                 'MPEG-1 Systems / MPEG program stream'
+'mpeg1video',    'mpg,mpeg,m1v',             'raw MPEG-1 video'
+'mpeg2video',    'm2v',                      'raw MPEG-2 video'
+'mpegts',        'ts,m2t,m2ts,mts',          'MPEG-TS (MPEG-2 Transport Stream)'
+'mpjpeg',        'mjpg',                     'MIME multipart JPEG'
+'mxf',           'mxf',                      'MXF (Material eXchange Format)'
+'oga',           'oga',                      'Ogg Audio'
+'ogg',           'ogg',                      'Ogg'
+'psp',           'mp4,psp',                  'PSP MP4 (MPEG-4 Part 14)'
+'rawvideo',      'yuv,rgb',                  'raw video'
+'rm',            'rm,ra',                    'RealMedia'
+'swf',           'swf',                      'SWF (ShockWave Flash)'
+'vc1',           'vc1',                      'raw VC-1 video'
+'wav',           'wav',                      'WAV / WAVE (Waveform Audio)'
+'yuv4mpegpipe',  'y4m',                      'YUV4MPEG pipe'
+
+
+
+
+muxers:
+avi, avi, mp3/ac3,mpeg4
+mp4, mp4, aac, h264/mpeg4
+mov, mov, aac, h264/mpeg4
+3pg, 3gp, amr_nb, h263
+psp, mp4/psp,aac,h264/mpeg4
+3g2, 3g2, amr_nb, h263
+ipod, m4v/m4a,aac,h264
+ismv,ismv/isma,aac,h264
+f4v,f4v,aac,h264
+flv,flv,mp3/adpcm_swf,flv1
+matroska,mkv,vorbis/ac3,h264/mpeg4,ass
+webm,webm,opus/vorbis,vp9/vp8,webvit
+rm,rm/ra,ac3,rv10
+
+
+avi:
+mpeg2,mpeg4,h264,hevc,vc1,vp8,rv30,rv40
+mp3,wma,aac,ac3,dts,
+
+flv:
+  flv1,h263,mpeg4,flashsv, flashsv2, vp6f,vp6,vp6a,h264,hevc
+  mp3,pcm_u8,pcm_s16be,pcm_s16le,adpcm_swf,aac,nellymoser,pcm_mulaw,pcm_alaw,speex,     
+
+mkv:
+unsupported video_codecs:
+  rv10,rv20,
+unsupported audio_codecs:
+  'atrac3','cook','ra_288','sipr'
+
+mp4:
+h264,hevc,vc1,mpeg2,mpeg4,h263
+aac,ac3,eac3,dirac,mp2,mp3,vorbis   
+
+mpegts:
+mpeg1,mpeg2,mpeg4,h264,hevc,vc1,
+mp2,mp3,aac,ac3

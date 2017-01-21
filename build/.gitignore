@@ -41,6 +41,8 @@
 *.suo
 *.ncb
 *.user
+*.sdf
+*.old
 Debug/
 Release/
 x64/
