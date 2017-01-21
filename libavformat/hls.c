@@ -305,6 +305,9 @@ static struct playlist *new_playlist(HLSContext *c, const char *url,
     struct playlist *pls = av_mallocz(sizeof(struct playlist));
     if (!pls)
         return NULL;
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
     reset_packet(&pls->pkt);
     ff_make_absolute_url(pls->url, sizeof(pls->url), base, url);
     pls->seek_timestamp = AV_NOPTS_VALUE;
@@ -330,6 +333,10 @@ static struct variant *new_variant(HLSContext *c, struct variant_info *info,
     struct variant *var;
     struct playlist *pls;
 
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
+
     pls = new_playlist(c, url, base);
     if (!pls)
         return NULL;
@@ -353,6 +360,9 @@ static struct variant *new_variant(HLSContext *c, struct variant_info *info,
 static void handle_variant_args(struct variant_info *info, const char *key,
                                 int key_len, char **dest, int *dest_len)
 {
+#if DEBUG_LOGS
+    av_log(info,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
     if (!strncmp(key, "BANDWIDTH=", key_len)) {
         *dest     =        info->bandwidth;
         *dest_len = sizeof(info->bandwidth);
@@ -404,6 +414,10 @@ static struct segment *new_init_section(struct playlist *pls,
 
     if (!info->uri[0])
         return NULL;
+
+#if DEBUG_LOGS
+    av_log(pls,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
 
     sec = av_mallocz(sizeof(*sec));
     if (!sec)
@@ -464,6 +478,9 @@ static struct rendition *new_rendition(HLSContext *c, struct rendition_info *inf
     char *chr_ptr;
     char *saveptr;
 
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
     if (!strcmp(info->type, "AUDIO"))
         type = AVMEDIA_TYPE_AUDIO;
     else if (!strcmp(info->type, "VIDEO"))
@@ -579,6 +596,9 @@ static void handle_rendition_args(struct rendition_info *info, const char *key,
  * *pls != NULL => parented Media Playlist, playlist+variant allocated */
 static int ensure_playlist(HLSContext *c, struct playlist **pls, const char *url)
 {
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
     if (*pls)
         return 0;
     if (!new_variant(c, NULL, url, NULL))
@@ -603,6 +623,9 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
     const char *proto_name = NULL;
     int ret;
 
+#if DEBUG_LOGS
+    av_log(s,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
     av_dict_copy(&tmp, opts, 0);
     av_dict_copy(&tmp, opts2, 0);
 
@@ -662,6 +685,9 @@ static int parse_playlist(HLSContext *c, const char *url,
     char tmp_str[MAX_URL_SIZE];
     struct segment *cur_init_section = NULL;
 
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
     if (!in) {
 #if 1
         AVDictionary *opts = NULL;
@@ -821,9 +847,6 @@ static int parse_playlist(HLSContext *c, const char *url,
                 }
 
                 ff_make_absolute_url(tmp_str, sizeof(tmp_str), url, line);
-#if DEBUG_LOGS
-                av_log(c,AV_LOG_DEBUG,"hls demux:ts url=%s\n",tmp_str);
-#endif
                 seg->url = av_strdup(tmp_str);
                 if (!seg->url) {
                     av_free(seg->key);
@@ -845,6 +868,10 @@ static int parse_playlist(HLSContext *c, const char *url,
                     seg_offset = 0;
                 }
 
+#if DEBUG_LOGS
+                av_log(c,AV_LOG_DEBUG,"hls demux:seg found duration=%d key_type=%d size=%d url=%s\n"
+                    ,seg->duration,seg->key_type,seg->size,seg->url);
+#endif
                 seg->init_section = cur_init_section;
             }
         }
@@ -875,6 +902,9 @@ static int read_from_url(struct playlist *pls, struct segment *seg,
 {
     int ret;
 
+#if DEBUG_LOGS
+    av_log(pls,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
      /* limit read if the segment was only a part of a file */
     if (seg->size >= 0)
         buf_size = FFMIN(buf_size, seg->size - pls->cur_seg_offset);
@@ -1095,6 +1125,9 @@ static int open_input(HLSContext *c, struct playlist *pls, struct segment *seg)
     int ret;
     int is_http = 0;
 
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
     // broker prior HTTP options that should be consistent across requests
     av_dict_set(&opts, "user-agent", c->user_agent, 0);
     av_dict_set(&opts, "cookies", c->cookies, 0);
@@ -1193,6 +1226,9 @@ static int update_init_section(struct playlist *pls, struct segment *seg)
     int64_t urlsize;
     int ret;
 
+#if DEBUG_LOGS
+    av_log(pls,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
     if (seg->init_section == pls->cur_init_section)
         return 0;
 
@@ -1256,6 +1292,10 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size)
     int ret, i;
     int just_opened = 0;
 
+#if DEBUG_LOGS
+    av_log(opaque,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
+
 restart:
     if (!v->needed)
         return AVERROR_EOF;
@@ -1288,6 +1328,9 @@ restart:
 reload:
         if (!v->finished &&
             av_gettime_relative() - v->last_load_time >= reload_interval) {
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:last_load_time=%d reload_interval=%d\n",v->last_load_time,reload_interval);
+#endif
             if ((ret = parse_playlist(c, v->url, v, NULL)) < 0) {
                 av_log(v->parent, AV_LOG_WARNING, "Failed to reload playlist %d\n",
                        v->index);
@@ -1298,15 +1341,13 @@ reload:
              * interval of half the target duration. */
             reload_interval = v->target_duration / 2;
         }
+#if DEBUG_LOGS
+        av_log(opaque, AV_LOG_DEBUG, "start_seq_no=%d cur_seq_no=%d\n", v->start_seq_no , v->cur_seq_no);
+#endif
         if (v->cur_seq_no < v->start_seq_no) {
             av_log(NULL, AV_LOG_WARNING,
                    "skipping %d segments ahead, expired from playlists\n",
                    v->start_seq_no - v->cur_seq_no);
-#if DEBUG_LOGS
-            av_log(NULL, AV_LOG_DEBUG,
-                   "v->start_seq_no=%d v->cur_seq_no=%d\n",
-                   v->start_seq_no , v->cur_seq_no);
-#endif
             v->cur_seq_no = v->start_seq_no;
         }
         if (v->cur_seq_no >= v->start_seq_no + v->n_segments) {
@@ -1362,6 +1403,9 @@ reload:
     v->cur_seq_no++;
 
     c->cur_seq_no = v->cur_seq_no;
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:v->cur_seq_no=%d\n",v->cur_seq_no);
+#endif
 
     goto restart;
 }
@@ -1371,6 +1415,9 @@ static void add_renditions_to_variant(HLSContext *c, struct variant *var,
 {
     int i;
 
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
     for (i = 0; i < c->n_renditions; i++) {
         struct rendition *rend = c->renditions[i];
 
@@ -1395,6 +1442,10 @@ static void add_metadata_from_renditions(AVFormatContext *s, struct playlist *pl
 {
     int rend_idx = 0;
     int i;
+
+#if DEBUG_LOGS
+    av_log(s,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
 
     for (i = 0; i < pls->n_main_streams; i++) {
         AVStream *st = pls->main_streams[i];
@@ -1429,6 +1480,10 @@ static int find_timestamp_in_playlist(HLSContext *c, struct playlist *pls,
     int64_t pos = c->first_timestamp == AV_NOPTS_VALUE ?
                   0 : c->first_timestamp;
 
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
+
     if (timestamp < pos) {
         *seq_no = pls->start_seq_no;
         return 0;
@@ -1452,6 +1507,10 @@ static int select_cur_seq_no(HLSContext *c, struct playlist *pls)
 {
     int seq_no;
 
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
+
     if (!pls->finished && !c->first_packet &&
         av_gettime_relative() - pls->last_load_time >= default_reload_interval(pls))
         /* reload the playlist since it was suspended */
@@ -1465,6 +1524,10 @@ static int select_cur_seq_no(HLSContext *c, struct playlist *pls)
         return seq_no;
     }
 
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:start_seq_no=%d n_seqments=%d live_start_index=%d\n",
+        pls->start_seq_no,pls->n_segments,c->live_start_index);
+#endif
     if (!pls->finished) {
         if (!c->first_packet && /* we are doing a segment selection during playback */
             c->cur_seq_no >= pls->start_seq_no &&
@@ -1525,6 +1588,10 @@ static void add_stream_to_programs(AVFormatContext *s, struct playlist *pls, AVS
     int i, j;
     int bandwidth = -1;
 
+#if DEBUG_LOGS
+    av_log(s,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
+
     for (i = 0; i < c->n_variants; i++) {
         struct variant *v = c->variants[i];
 
@@ -1549,6 +1616,10 @@ static int set_stream_info_from_input_stream(AVStream *st, struct playlist *pls,
 {
     int err;
 
+#if DEBUG_LOGS
+    av_log(st,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
+
     err = avcodec_parameters_copy(st->codecpar, ist->codecpar);
     if (err < 0)
         return err;
@@ -1567,6 +1638,10 @@ static int set_stream_info_from_input_stream(AVStream *st, struct playlist *pls,
 static int update_streams_from_subdemuxer(AVFormatContext *s, struct playlist *pls)
 {
     int err;
+
+#if DEBUG_LOGS
+    av_log(s,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
 
     while (pls->n_main_streams < pls->ctx->nb_streams) {
         int ist_idx = pls->n_main_streams;
@@ -1594,6 +1669,10 @@ static void update_noheader_flag(AVFormatContext *s)
     HLSContext *c = s->priv_data;
     int flag_needed = 0;
     int i;
+
+#if DEBUG_LOGS
+    av_log(s,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
 
     for (i = 0; i < c->n_playlists; i++) {
         struct playlist *pls = c->playlists[i];
@@ -1629,6 +1708,10 @@ static int hls_read_header(AVFormatContext *s)
     HLSContext *c = s->priv_data;
     int ret = 0, i;
     int highest_cur_seq_no = 0;
+
+#if DEBUG_LOGS
+    av_log(s,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
 
     c->ctx                = s;
     c->interrupt_callback = &s->interrupt_callback;
@@ -1833,6 +1916,10 @@ static int recheck_discard_flags(AVFormatContext *s, int first)
     HLSContext *c = s->priv_data;
     int i, changed = 0;
 
+#if DEBUG_LOGS
+    av_log(s,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
+
     /* Check if any new streams are needed */
     for (i = 0; i < c->n_playlists; i++)
         c->playlists[i]->cur_needed = 0;
@@ -1915,6 +2002,10 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
     HLSContext *c = s->priv_data;
     int ret, i, minplaylist = -1;
 
+#if DEBUG_LOGS
+    av_log(s,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
+
     recheck_discard_flags(s, c->first_packet);
     c->first_packet = 0;
 
@@ -1926,6 +2017,9 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
             while (1) {
                 int64_t ts_diff;
                 AVRational tb;
+#if DEBUG_LOGS
+    av_log(c,AV_LOG_DEBUG,"hls demux:reading frame");
+#endif
                 ret = av_read_frame(pls->ctx, &pls->pkt);
                 if (ret < 0) {
                     if (!avio_feof(&pls->pb) && ret != AVERROR_EOF)
@@ -2050,6 +2144,10 @@ static int hls_read_seek(AVFormatContext *s, int stream_index,
     int j;
     int stream_subdemuxer_index;
     int64_t first_timestamp, seek_timestamp, duration;
+
+#if DEBUG_LOGS
+    av_log(s,AV_LOG_DEBUG,"hls demux:%s:%s",__FILE__,__FUNCTION__);
+#endif
 
     if ((flags & AVSEEK_FLAG_BYTE) ||
         !(c->variants[0]->playlists[0]->finished || c->variants[0]->playlists[0]->type == PLS_TYPE_EVENT))
